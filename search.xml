@@ -1,0 +1,1012 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search>
+  <entry>
+    <title>helm 架设 mattermost 踩坑</title>
+    <url>/2020/02/29/mattermostHelmPitfalls/</url>
+    <content><![CDATA[<h2 id="工作"><a href="#工作" class="headerlink" title="工作"></a>工作</h2><p>却说社畜以来，做了兼职 <del>半吊子</del> 运维，用 k8s 部署些前后端。现在疫情影响，大家广泛应用远程办公工具，这公务交流显然要用专业工具。先前试用 slack，但毕竟在美帝受墙干扰，且免费版限制多，于是决定切换到自架 mattermost</p>
+<h2 id="matternost"><a href="#matternost" class="headerlink" title="matternost"></a>matternost</h2><blockquote>
+<p>Mattermost is a flexible, open source messaging platform<br>that enables secure team collaboration</p>
+</blockquote>
+<p>根据官网 <del>吹逼</del> 宣传，mattermost 是个开源的团队交流工具，看 UI 也和 slack 相近，用起来应该没有问题，甚至还用中文。注意到还有 <a href="https://github.com/mattermost/mattermost-helm" target="_blank" rel="noopener">helm 版</a> 。有了这个可部署方便多了</p>
+<h2 id="踩坑"><a href="#踩坑" class="headerlink" title="踩坑"></a>踩坑</h2><p>于是按照文档开始部署，坑就来了。</p>
+<h3 id="1-toyaml-error"><a href="#1-toyaml-error" class="headerlink" title="1. toyaml error"></a>1. toyaml error</h3><p>首先按所需变量一填，没想到报 toYaml error。原本以为 github 撞墙，下回来 tgz 在🐧☁️上开 darkhttpd ，没想到不是这个问题。没办法看下 yaml，原来是 resource 要填。原以为是 mattermost 的变量，没想到是 k8s 的 resource。以前创的时候用🐧☁️图形化没注意到😓</p>
+<h3 id="2-pod-has-unbound-PersistentVolumeClaims"><a href="#2-pod-has-unbound-PersistentVolumeClaims" class="headerlink" title="2. pod has unbound PersistentVolumeClaims"></a>2. pod has unbound PersistentVolumeClaims</h3><p>填上 resource 后接着来，这下没报错了。跑去集群一看，没启动起来，报<code>pod has unbound PersistentVolumeClaims</code>。以为硬盘不够，一看也还有空间。跑去集群——存储看看，没想到🐧☁️开存储最少开 10G，而 mattermost plugins 开 1G。是 1G 开不出来</p>
+<h3 id="3-read-only-file-system"><a href="#3-read-only-file-system" class="headerlink" title="3. read only file system"></a>3. read only file system</h3><p>再改配置开 10G，终于跑起来了。想着终于部署完了，进入后台开始配置，一点保存没想到又报错，看 log 发现报<code>open /mattermost/config/config.json: read-only file system</code>。配置是只读，这就没道理。逛下 github issue 发现  <a href="https://github.com/mattermost/mattermost-helm/issues/100" target="_blank" rel="noopener">mattermost/mattermost-helm#100</a> 有报这个问题，原来 matternost 把配置做 secret 而只读，总不能改个配置就重新部署一下。按照评论使用<code>extraInitContainers</code>把 config.json 拷去 data 空间，就可以读了。</p>
+<p><code>extraInitContainers</code> 使用了一个 alpine 来执行 cp 命令，这些配置</p>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">extraInitContainers:</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">copy-config</span></span><br><span class="line"><span class="attr">    image:</span> <span class="string">"alpine:latest"</span></span><br><span class="line"><span class="attr">    imagePullPolicy:</span> <span class="string">IfNotPresent</span></span><br><span class="line"><span class="attr">    volumeMounts:</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/config/config.json</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">config-json</span></span><br><span class="line"><span class="attr">      subPath:</span> <span class="string">config.json</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">mattermost-data</span></span><br><span class="line"><span class="attr">    command:</span> <span class="string">["/bin/ash",</span> <span class="string">"-c"</span><span class="string">,</span> <span class="string">"cp -f /mattermost/config/config.json /mattermost/data/config.json"</span><span class="string">]</span></span><br><span class="line"><span class="attr">extraEnvVars:</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">MM_CONFIG</span></span><br><span class="line"><span class="attr">    value:</span> <span class="string">"/mattermost/data/config.json"</span></span><br></pre></td></tr></table></figure>
+<p>按🐧☁️ key-value 写显然要命，就得想想用其他方法。这种写作 yaml 最方便，看 helm 可以用 -f 指定文件，按🐧☁️<a href="https://cloud.tencent.com/document/product/457/32731" target="_blank" rel="noopener">文档</a> 可以用 helm 客户端连进去，于是先开 kubectl 内网访问，后开 helm 连接进去。</p>
+<h3 id="4-permission-denied"><a href="#4-permission-denied" class="headerlink" title="4.permission denied"></a>4.permission denied</h3><p>这次用 yaml 创出来了再去配置又报 <code>open /mattermost/data/config.json: permission denied</code>，我寻思 mattermost 还能对自己 data 空间没权限，再逛逛 issue 发现  <a href="https://github.com/mattermost/mattermost-helm/issues/120" target="_blank" rel="noopener">mattermost/mattermost-helm#120</a> 使用 busybox 来赋予权限。按照这样先赋权后拷贝，应该就可以有权限更改了。</p>
+<h2 id="终章"><a href="#终章" class="headerlink" title="终章"></a>终章</h2><p>经过这些配置后发现在 5.13.2 版本下没问题，估计 tgz 只适配 5.13.2 版本。列出示例配置：</p>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="attr">resources:</span></span><br><span class="line"><span class="attr">  limits:</span></span><br><span class="line"><span class="attr">    cpu:</span> <span class="number">500</span><span class="string">m</span></span><br><span class="line"><span class="attr">    memory:</span> <span class="number">1</span><span class="string">Gi</span></span><br><span class="line"><span class="attr">  requests:</span></span><br><span class="line"><span class="attr">    cpu:</span> <span class="number">100</span><span class="string">m</span></span><br><span class="line"><span class="attr">    memory:</span> <span class="number">512</span><span class="string">Mi</span></span><br><span class="line"></span><br><span class="line"><span class="attr">persistence:</span></span><br><span class="line"><span class="attr">  plugins:</span></span><br><span class="line"><span class="attr">    size:</span> <span class="number">10</span><span class="string">Gi</span></span><br><span class="line">  </span><br><span class="line"><span class="attr">extraEnvVars:</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">MM_CONFIG</span></span><br><span class="line"><span class="attr">    value:</span> <span class="string">"/mattermost/data/config.json"</span></span><br><span class="line"></span><br><span class="line"><span class="attr">extraInitContainers:</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">set-plugins-owner</span></span><br><span class="line"><span class="attr">    command:</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">sh</span></span><br><span class="line"><span class="bullet">    -</span> <span class="bullet">-c</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">chown</span> <span class="bullet">-R</span> <span class="number">2000</span><span class="string">:2000</span> <span class="string">/mattermost/plugins</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">chgrp</span> <span class="number">2000</span> <span class="string">/mattermost/plugins</span></span><br><span class="line"><span class="attr">    image:</span> <span class="attr">busybox:1.29.2</span></span><br><span class="line"><span class="attr">    imagePullPolicy:</span> <span class="string">IfNotPresent</span></span><br><span class="line"><span class="attr">    resources:</span> <span class="string">&#123;&#125;</span></span><br><span class="line"><span class="attr">    securityContext:</span></span><br><span class="line"><span class="attr">      privileged:</span> <span class="literal">true</span></span><br><span class="line"><span class="attr">    terminationMessagePath:</span> <span class="string">/dev/termination-log</span></span><br><span class="line"><span class="attr">    terminationMessagePolicy:</span> <span class="string">File</span></span><br><span class="line"><span class="attr">    volumeMounts:</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/plugins</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">mattermost-plugins</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">set-data-owner</span></span><br><span class="line"><span class="attr">    command:</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">sh</span></span><br><span class="line"><span class="bullet">    -</span> <span class="bullet">-c</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">chown</span> <span class="bullet">-R</span> <span class="number">2000</span><span class="string">:2000</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">chgrp</span> <span class="number">2000</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="attr">    image:</span> <span class="attr">busybox:1.29.2</span></span><br><span class="line"><span class="attr">    imagePullPolicy:</span> <span class="string">IfNotPresent</span></span><br><span class="line"><span class="attr">    resources:</span> <span class="string">&#123;&#125;</span></span><br><span class="line"><span class="attr">    securityContext:</span></span><br><span class="line"><span class="attr">      privileged:</span> <span class="literal">true</span></span><br><span class="line"><span class="attr">    terminationMessagePath:</span> <span class="string">/dev/termination-log</span></span><br><span class="line"><span class="attr">    terminationMessagePolicy:</span> <span class="string">File</span></span><br><span class="line"><span class="attr">    volumeMounts:</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">mattermost-data</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">copy-config</span></span><br><span class="line"><span class="attr">    image:</span> <span class="string">"alpine:latest"</span></span><br><span class="line"><span class="attr">    imagePullPolicy:</span> <span class="string">IfNotPresent</span></span><br><span class="line"><span class="attr">    volumeMounts:</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/config/config.json</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">config-json</span></span><br><span class="line"><span class="attr">      subPath:</span> <span class="string">config.json</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">mattermost-data</span></span><br><span class="line"><span class="attr">    command:</span> <span class="string">["/bin/ash",</span> <span class="string">"-c"</span><span class="string">,</span> <span class="string">"cp -f /mattermost/config/config.json /mattermost/data/config.json"</span><span class="string">]</span></span><br></pre></td></tr></table></figure>
+
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>helm</tag>
+        <tag>mattermost</tag>
+        <tag>k8s</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>新年新主题</title>
+    <url>/2020/02/10/2020newYearNewTheme/</url>
+    <content><![CDATA[<h2 id="2020"><a href="#2020" class="headerlink" title="2020"></a>2020</h2><p>却说社畜以来，每日上班摧残没得精力写 blog，一不小心就到了 2020 年。2019 年只有一篇🌚，再不更给你们有关博🐦🐦之感。万万没想到 2020 年初疫情搞的假期越来越长，甚至出现远程上班。远程上班那可就放心 <del>划水</del> 休闲，于是有闲情更博。</p>
+<h2 id="换主题"><a href="#换主题" class="headerlink" title="换主题"></a>换主题</h2><p>本博先使用 indigo 主题已久，本来也是基本适用。前两日却有 gayhub 邮件轰炸，说什么 <code>GitHub API Deprecation notice</code>。于是便想更新主题，没想到主题年久失修，最后更新于去年 1 月。看来不能指望了，逛一圈发现新近出来的主题 <a href="https://www.v2ex.com/t/629144" target="_blank" rel="noopener">Ayer</a> 较为美观、功能齐全、更新迅速（昨天 PR gitalk 更新迅速 merged）。于是切换到 Ayer，本博更现代😆</p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>hexo</tag>
+        <tag>主题</tag>
+        <tag>2020</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>beancount 踩坑记录</title>
+    <url>/2019/04/18/beancountPitfalls/</url>
+    <content><![CDATA[<h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>却说社畜以来，不得不考虑衣食住行。加上入了卡圈，申来一堆卡，出账分散。若没有记账自然生活捉急。但考量市面各记账软件，要不限制在自己平台（不放心数据安全），要不功能有限（记录麻烦）。恰巧前几天在<a href="https://twitter.com/lilydjwg/status/1117033078541578241" target="_blank" rel="noopener">推上</a>看到有推荐 beancount，由此才发现复式记账的优雅，便装来记账一番。</p>
+<h2 id="基础知识"><a href="#基础知识" class="headerlink" title="基础知识"></a>基础知识</h2><p>欲记账自然要先了解记账，择录两篇作先行入门。</p>
+<p><a href="https://wzyboy.im/post/1063.html" target="_blank" rel="noopener">《Beancount —— 命令行复式簿记》</a> from wzyboy’s blog</p>
+<p><a href="https://yuchi.me/post/beancount-intro/" target="_blank" rel="noopener">《beancount 简易入门指南》</a> from Chi’s Journal</p>
+<h2 id="账单预处理"><a href="#账单预处理" class="headerlink" title="账单预处理"></a>账单预处理</h2><p>记账源头自然来自账单，但账单格式各异。需要做预处理。</p>
+<p>好比建行借记卡账单</p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><span class="line">China Construction Bank,,,,,,,,,,</span><br><span class="line">开户机构：,XX市,,,,,,,,,</span><br><span class="line">币　　种：,人民币,,,,,,,,,</span><br><span class="line">账　　号：,6217XXXXXXXXXXX,,,,,,,,,</span><br><span class="line">,,,,,,,,,,</span><br><span class="line">记账日          ,交易日期          ,交易时间                ,支出                ,收入                ,账户余额          ,币种          ,摘要            ,对方账号          ,对方户名          ,交易地点                </span><br><span class="line">20190416,20190416,07:43:12,1.00,0.00,&quot;XXXX&quot;,人民币,跨行其他渠道消费,XXXXXXXX,二维码快速收款码专用,二维码快速收款码专用</span><br></pre></td></tr></table></figure>
+
+<p>观察发现有许多无用信息，虽然 beancount importer 会去匹配 header，但遇到空单元格会报错。如 <code>账　　号：,6217XXXXXXXXXXX,,,,,,,,,</code> 一行，需自己填充空位或删去此行。当然各账单头差不多，删去就失去辨别性，还是留一行做辨识。</p>
+<h2 id="beancount-运行"><a href="#beancount-运行" class="headerlink" title="beancount 运行"></a>beancount 运行</h2><p>当装好 beancount 与 fava 后准备开心看图表。没想到报 Reason: image not found 错误。原以为是 pyenv 所装 3.6.5 太旧，于是安装 3.7.0。但并没有什么卯用，后来发现是 xcode command-line 的问题，于是更新完毕解决。</p>
+<h2 id="结语"><a href="#结语" class="headerlink" title="结语"></a>结语</h2><p>beancount 作为纯文本记账。数据自我掌控十分安全、前端丰富展现优雅、复式记账科学精细。实乃居家必备良品。</p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>坑</tag>
+        <tag>beancount</tag>
+        <tag>记账</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>为 Hexo 主题 indigo 添加 gitalk 插件</title>
+    <url>/2018/09/15/hexoIndigoGitalk/</url>
+    <content><![CDATA[<h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>去年给现在用的主题添加了 gitment 评论插件后一直使用良好，但今天新 po 文章发现 gitment 停摆了🌚，表现为无法 initialize、登录出现 [object ProgressEvent] 错误。观察 gitment 也许久没更新，估计作者<del>跑路</del>没时间更，而 github 或许又有什么变动造成不能用。因此物色新评论系统。</p>
+<h2 id="Gitalk"><a href="#Gitalk" class="headerlink" title="Gitalk"></a>Gitalk</h2><p>这时观察到 <a href="https://github.com/gitalk/gitalk" target="_blank" rel="noopener">gitalk</a> 可以较好替代，有如下优点：</p>
+<ul>
+<li>作者更新勤</li>
+<li>工作正常</li>
+<li>界面优雅</li>
+<li>动画丰富</li>
+<li>自动建 issue</li>
+</ul>
+<p>等等</p>
+<h2 id="轻车熟路加插件"><a href="#轻车熟路加插件" class="headerlink" title="轻车熟路加插件"></a>轻车熟路加插件</h2><p>因为有了先前经验<a href="https://blog.ckyol.moe/2017/05/04/gitmentHexoTheme/">为 Hexo 主题 indigo 添加 gitment 支持</a>，直接加插件。类似 gitment 只需替换 style、script 链接，将 gitalk 关联 config.yml 即可</p>
+<figure class="highlight js"><table><tr><td class="code"><pre><span class="line">&lt;% <span class="keyword">if</span> (theme.gitalk)&#123; %&gt;</span><br><span class="line">&lt;section <span class="class"><span class="keyword">class</span></span>=<span class="string">"comments"</span> id=<span class="string">"comments"</span>&gt;</span><br><span class="line">    &lt;div id=<span class="string">"gitalk-container"</span>&gt;<span class="xml"><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span></span><br><span class="line">    &lt;link rel=<span class="string">"stylesheet"</span> href=<span class="string">"https://unpkg.com/gitalk/dist/gitalk.css"</span>&gt;</span><br><span class="line">    &lt;script src=<span class="string">"https://unpkg.com/gitalk/dist/gitalk.min.js"</span>&gt;<span class="xml"><span class="tag">&lt;/<span class="name">script</span>&gt;</span></span></span><br><span class="line">    &lt;script&gt;</span><br><span class="line">        <span class="keyword">var</span> gitalk = <span class="keyword">new</span> Gitalk(&#123;</span><br><span class="line">            clientID: <span class="string">'&lt;%- theme.gitalk.client_id %&gt;'</span>,</span><br><span class="line">            clientSecret: <span class="string">'&lt;%- theme.gitalk.client_secret %&gt;'</span>,</span><br><span class="line">            repo: <span class="string">'&lt;%- theme.gitalk.repo %&gt;'</span>,</span><br><span class="line">            owner: <span class="string">'&lt;%- theme.gitalk.owner %&gt;'</span>,</span><br><span class="line">            admin: <span class="string">'&lt;%- theme.gitalk.admin %&gt;'</span>,</span><br><span class="line">            id: <span class="string">'&lt;%= page.date %&gt;'</span>,</span><br><span class="line">            distractionFreeMode: <span class="literal">false</span></span><br><span class="line">            &#125;)</span><br><span class="line">            </span><br><span class="line">        gitalk.render(<span class="string">'gitalk-container'</span>)</span><br><span class="line">    &lt;<span class="regexp">/script&gt;</span></span><br><span class="line"><span class="regexp">&lt;/</span>section&gt;</span><br><span class="line">&lt;% &#125; %&gt;</span><br></pre></td></tr></table></figure>
+
+<p>默认 label 用 URL 难免超 50 字，为保标签不爆改用时间。若不喜欢可替换。</p>
+<p>然后在 comment.ejs 加载 gitalk 即可</p>
+<h2 id="测试"><a href="#测试" class="headerlink" title="测试"></a>测试</h2><p>添加完后 blog 成功加载 gitalk</p>
+<p><img src="https://i.imgur.com/L7RgDj4.png" alt="gitalk success"></p>
+<h2 id="结语"><a href="#结语" class="headerlink" title="结语"></a>结语</h2><p>等下提个 PR 去（不过先前的添加比特币打赏支援都没 merge🙄）</p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>hexo</tag>
+        <tag>前端</tag>
+        <tag>gitalk</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Vue 前端配合 Devise Token Auth 忘记密码重置操作</title>
+    <url>/2018/09/15/DTAresetPasswdWithVue/</url>
+    <content><![CDATA[<h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>近来开发个活动报名站，后端使用 Ruby on Rails，前端使用 Vue。由于是SPA，传统的 cookie 法就不太适宜，使用流行的 JWT。因此选用 <a href="https://github.com/lynndylanhurley/devise_token_auth" target="_blank" rel="noopener">Devise Token Auth</a> gem 来处理用户模型与 token 发行、验证等工作。</p>
+<h2 id="密码重置流程"><a href="#密码重置流程" class="headerlink" title="密码重置流程"></a>密码重置流程</h2><p>其他模块使用正常且方便。而忘记密码重置涉及到邮件，reset link 发行等就显得麻烦。根据官方 wiki 记载 <a href="https://devise-token-auth.gitbook.io/devise-token-auth/faq#whats-the-reset-password-flow" target="_blank" rel="noopener">reset password flow</a></p>
+<blockquote>
+<ul>
+<li>在前端页面中填写邮箱地址输入框，有按钮可以发送重置邮件</li>
+<li><code>POST /auth/password</code> <code>JSON: {email, redirect_url}</code><br>这里 redirect_url 为前端页面，有填写密码框</li>
+<li>后端生成 <code>reset_password_token</code> 与链接填入邮件，形如 <code>http://localhost:3000/api/v1/auth/password/edit?config=default</code><br><code>&amp;redirect_url=http%3A%2F%2Flocalhost%3A8080%2Freset</code><br><code>&amp;reset_password_token=L77a9yx2JHehPCgVoQ2_</code> </li>
+<li>前端跳转 redirect url</li>
+<li>前端用 <code>reset_password_token</code>、client、uid 作 headers <code>PUT /auth/password</code> 完成重置</li>
+</ul>
+</blockquote>
+<p>观察链接，发现其中包含<code>reset_password_token</code>与<code>redirect_url</code>，点击跳转前端链接 <code>http://localhost:8080/reset?</code></p>
+<p><code>access-token=D3zacAdKrGwRPxcQ-9rnXQ&amp;</code></p>
+<p><code>client=CwF0zNBw9ovM3KmHaCmIIg&amp;</code></p>
+<p><code>client_id=CwF0zNBw9ovM3KmHaCmIIg&amp;</code></p>
+<p><code>config=default&amp;expiry=1538140242&amp;reset_password=true&amp;</code></p>
+<p><code>token=D3zacAdKrGwRPxcQ-9rnXQ&amp;</code></p>
+<p><code>uid=1%40e.com</code></p>
+<p>可见 headers 信息都有包含在 URL</p>
+<h2 id="问题"><a href="#问题" class="headerlink" title="问题"></a>问题</h2><p>网络中 devise token auth 重置密码相关的文章中使用 MVC，API的相对少，用 Vue 就更少。还得自己摸索。</p>
+<h3 id="问题1-hash-路径错位"><a href="#问题1-hash-路径错位" class="headerlink" title="问题1: hash 路径错位"></a>问题1: hash 路径错位</h3><p>最初在项目中 Vue-router 使用 hash 模式，故在请求 json 中填写 <code>redirect_url</code> 包含 #。而 rails 处理后忽略掉 # 造成路径错误，这里可以改用 history 模式解决。URL 中的参数可用 <code>route.query</code> 取出。</p>
+<p>另有 router navigation guard 的应设定确保不跳转，不然链接变成 <code>http://localhost:8080/reset?</code></p>
+<p><code>access-token=D3zacAdKrGwRPxcQ-9rnXQ&amp;</code></p>
+<p><code>client=CwF0zNBw9ovM3KmHaCmIIg&amp;</code></p>
+<p><code>client_id=CwF0zNBw9ovM3KmHaCmIIg&amp;</code></p>
+<p><code>config=default&amp;expiry=1538140242&amp;reset_password=true&amp;</code></p>
+<p><code>token=D3zacAdKrGwRPxcQ-9rnXQ&amp;uid=1%40e.com#/login</code></p>
+<p>这里本人设定未登录跳转登录页，跳转信息与重置 URL 混杂造成混乱。</p>
+<p>Vue 复用密码修改组件（若有登录后修改选项的话）可抽离 request 函数，通过判别是否有登录信息（如 Vuex state、sessionStorage）构造不同的 headers 发送请求。</p>
+<h3 id="问题2-后端路径-host-变前端-host（password-edit"><a href="#问题2-后端路径-host-变前端-host（password-edit" class="headerlink" title="问题2: 后端路径 host 变前端 host（password#edit)"></a>问题2: 后端路径 host 变前端 host（password#edit)</h3><p>原来 devise token anth 生成 reset password url 时取前端 host name，要是后端域名与之不同就出错。如前端 <code>a.com</code>，后端<code>b.com</code>，则邮件中生成 <code>http://a.com/api/v1/auth/password/edit?...</code>。看起来默认当作 MVC，是同域。 </p>
+<p>而在本地测试时同域端口不同没发现问题，可见靠同域不同端口区分。而部署到服务器用 80，443 端口就不区分了，怎么办呢？最后反代前端 /api 到 rails 解决。如 caddy 写法：</p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><span class="line"># 前端</span><br><span class="line">a.com &#123; </span><br><span class="line">    root &#x2F;var&#x2F;www&#x2F;xxx</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"># 将错误路径导向 api</span><br><span class="line">a.com&#x2F;api &#123;</span><br><span class="line">    proxy &#x2F; locahost:3000&#x2F;api &#123;</span><br><span class="line">        transparent</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"># 后端</span><br><span class="line">b.com &#123;</span><br><span class="line">    proxy &#x2F; locahost:3000 &#123;</span><br><span class="line">        transparent</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="Bonus-custom-Devise-Token-Auth-registration-controller"><a href="#Bonus-custom-Devise-Token-Auth-registration-controller" class="headerlink" title="Bonus: custom Devise Token Auth registration controller"></a>Bonus: custom Devise Token Auth registration controller</h2><p>设定用户删除账户时会同时删除创建的活动、与报名信息（人都跑路，活动显然没了，报名也吹了）防止出错（活动详细页获取不到创建人信息，报名信息有 null）</p>
+<p>Devise Token Auth 中 用户注册、删除在 registration controller，默认删除操作只是完成用户删除不管别的。这时需要自定义。创建自定义类继承基类</p>
+<figure class="highlight ruby"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Users::RegistrationsController</span> &lt; DeviseTokenAuth::RegistrationsController</span></span><br><span class="line">  <span class="function"><span class="keyword">def</span> <span class="title">destroy</span></span></span><br><span class="line">    @resource.events.each(&amp;<span class="symbol">:destroy</span>)</span><br><span class="line">    @resource.bookings.each(&amp;<span class="symbol">:destroy</span>)</span><br><span class="line">    <span class="keyword">super</span></span><br><span class="line">  <span class="keyword">end</span></span><br><span class="line"><span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+<p>由于在基类中已经获取到资源</p>
+<figure class="highlight ruby"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">module</span> <span class="title">DeviseTokenAuth</span></span></span><br><span class="line">  <span class="class"><span class="keyword">class</span> <span class="title">RegistrationsController</span> &lt; DeviseTokenAuth::ApplicationController</span></span><br><span class="line">    before_action <span class="symbol">:set_user_by_token</span>, <span class="symbol">only:</span> [<span class="symbol">:destroy</span>, <span class="symbol">:update</span>] <span class="comment"># 这里 return <span class="doctag">@resource</span></span></span><br></pre></td></tr></table></figure>
+
+<p>因此可以直接使用，而不是向 super 加块处理。因为 super 的方法中块在 destroy 后</p>
+<figure class="highlight ruby"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">destroy</span></span></span><br><span class="line">      <span class="keyword">if</span> @resource</span><br><span class="line">        @resource.destroy</span><br><span class="line">        <span class="keyword">yield</span> @resource <span class="keyword">if</span> block_given? <span class="comment">#destroy 后找不到用户相关联的活动</span></span><br><span class="line">        render_destroy_success</span><br><span class="line">      <span class="keyword">else</span></span><br><span class="line">        render_destroy_error</span><br><span class="line">      <span class="keyword">end</span></span><br><span class="line">    <span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+<h2 id="后记"><a href="#后记" class="headerlink" title="后记"></a>后记</h2><p>其他问题好找，这个就没有了（估计第一篇Rails 5 API + Devise Token Auth + Vue 的密码重置流）。完成这个也算尾声了，现在将要部署，而 production 如何设定，dockerfile 如何写就一脸懵逼。若有运维可以赐教就感激不尽。</p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>Vue</tag>
+        <tag>前端</tag>
+        <tag>Rails</tag>
+        <tag>Devise Token Auth</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>ルビィの Ruby 教室</title>
+    <url>/2018/08/11/rubyProgLesson/</url>
+    <content><![CDATA[<blockquote>
+<p>想成为 Ruby girls 的众人，在露比老师的编程教室上？</p>
+</blockquote>
+<h2 id="1话-方法好像有点多"><a href="#1话-方法好像有点多" class="headerlink" title="1话 方法好像有点多"></a>1话 方法好像有点多</h2><p>露比「昨天的课程大家记住了吗」</p>
+<p>千歌「递归、算法…这么难的东西，完全不懂啊」</p>
+<p>露比「算法暂时用不到的啦」</p>
+<p>曜「露比酱，为什么我们要学 ruby 啊」</p>
+<p>露比「比起C，ruby更加简单呦（其实是和我名字相同啦）」</p>
+<p>千歌「唔哇，还有更加难的语言，好可怕」</p>
+<p>露比「今天的课题是链表，首先构建 ListNode 类试下」</p>
+<figure class="highlight ruby"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">ListNode</span></span></span><br><span class="line">  <span class="keyword">attr_accessor</span> <span class="symbol">:val</span>, <span class="symbol">:next_node</span></span><br><span class="line">  <span class="function"><span class="keyword">def</span> <span class="title">initialize</span><span class="params">(val)</span></span></span><br><span class="line">    @val = val</span><br><span class="line">    @next_node = <span class="literal">nil</span></span><br><span class="line">  <span class="keyword">end</span></span><br><span class="line"><span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+<p>露比「val 是结点的值，next_node 是指向下一个结点。好，来试试遍历一下」</p>
+<p>曜「遍历的话，一直循环到尾结点」</p>
+<figure class="highlight ruby"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">order_traversal</span><span class="params">(head)</span></span></span><br><span class="line">  <span class="keyword">until</span> head.<span class="literal">nil</span>?</span><br><span class="line">    puts head.val</span><br><span class="line">    head = head.next_node</span><br><span class="line">  <span class="keyword">end</span></span><br><span class="line"><span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+<p>露比「嗯，要是再将链表转换成数组呢」</p>
+<p>千歌「我知道我知道，把输出换成数组赋值」</p>
+<figure class="highlight ruby"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">order_traversal</span><span class="params">(head, array)</span></span></span><br><span class="line">  <span class="keyword">until</span> head.<span class="literal">nil</span>?</span><br><span class="line">    array &lt;&lt; head.val</span><br><span class="line">    head = head.next_node</span><br><span class="line">  <span class="keyword">end</span></span><br><span class="line"><span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+<p>千歌「嘿嘿，千歌我还是会一点的哟」</p>
+<p>露比「要是再将计数呢」</p>
+<p>千歌「那再改…」</p>
+<p>曜「要是每个都这样改，方法好像有点多啊」</p>
+<p>千歌「额，那怎么办呀」</p>
+<h2 id="2话-用块就可以啦ずら"><a href="#2话-用块就可以啦ずら" class="headerlink" title="2话 用块就可以啦ずら"></a>2话 用块就可以啦ずら</h2><p>曜「要不问下其他小队」</p>
+<p>夜羽「くくく，愚昧的凡人啊，就让堕天使夜羽给你们展示下黑魔法」</p>
+<figure class="highlight ruby"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">operator</span><span class="params">(head, name, *args)</span></span></span><br><span class="line">  send(name, head, *args)</span><br><span class="line"><span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+<p>夜羽「只要用 send 方法，可以省略成一个方法，并且传多少值都没问题」</p>
+<p>花丸「用了 send 也还是要定义其他方法，根本没有解决ずら」</p>
+<p>露比「其实这个可以用块简化一下」</p>
+<figure class="highlight ruby"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">traversal</span><span class="params">(&amp;block)</span></span></span><br><span class="line">  <span class="keyword">yield</span></span><br><span class="line">  next_node.traversal(&amp;block) <span class="keyword">if</span> next_node</span><br><span class="line"><span class="keyword">end</span></span><br><span class="line"></span><br><span class="line">list.traversal &#123; <span class="params">|x|</span> puts x.val &#125;</span><br><span class="line"></span><br><span class="line">array = []</span><br><span class="line">list.traversal &#123; <span class="params">|x|</span> array &lt;&lt; x.val &#125;</span><br></pre></td></tr></table></figure>
+
+<p>千歌「露比老师真厉害」</p>
+<p>梨子「看起来有点不对，测试一下」</p>
+<figure class="highlight ruby"><table><tr><td class="code"><pre><span class="line"><span class="symbol">NoMethodError:</span> undefined method <span class="string">`val' for nil:NilClass</span></span><br></pre></td></tr></table></figure>
+
+<p>夜羽「难道是被天界的敌人偷走了」</p>
+<p>梨子「看起来不行啊，夜酱，天界不会影响代码运行的啦」</p>
+<p>露比「诶，这个…呜呜姐姐」</p>
+<p>黛雅「露比，你啊没有指向 self。假如不涉及取值，yield 代指的块中代码运行没问题，要是有取值不指定就会返回nil」</p>
+<p>众人「原来如此」</p>
+<p>花丸「果然改为 yield(self) 就好了，未来ずら」</p>
+<h2 id="3话-深入递归"><a href="#3话-深入递归" class="headerlink" title="3话 深入递归"></a>3话 深入递归</h2><p>鞠莉「wow，ruby 比起 american 的 C 有趣多了」</p>
+<p>鞠莉「要是反转输出呢」</p>
+<p>千歌「先一个一个移动，到尾结点再往回输出，啊不好，找不到前面的结点了」</p>
+<p>果南「听说有个栈可以后入先出」</p>
+<p>梨子「递归也是运用栈，刚才的遍历就用了递归。那把 yield(self) 位置移动一下就可以先递归到尾结点」</p>
+<figure class="highlight ruby"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">reverse_traversal</span><span class="params">(&amp;block)</span></span></span><br><span class="line">  next_node.reverse_traversal(&amp;block) <span class="keyword">if</span> next_node</span><br><span class="line">  <span class="keyword">yield</span>(<span class="keyword">self</span>)</span><br><span class="line"><span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+
+<h2 id="4话-Ruby-girls"><a href="#4话-Ruby-girls" class="headerlink" title="4话 Ruby girls"></a>4话 Ruby girls</h2><p>鞠莉「Amazing！ruby 真是优雅呢」</p>
+<p>果南「这么有趣的语言，我也提起兴趣了呢」</p>
+<p>露比「深入学习的话，还有更多优雅的特性等着我们」</p>
+<p>夜羽「くくく，堕天使夜羽早已窥见禁忌的元编程法术。小恶魔们放心，夜羽可不会被反噬的」</p>
+<p>花丸「刚才就乱用了ずら」</p>
+<p>夜羽「呀，才没有呢，ずら丸」</p>
+<p>曜「既然学习了 ruby，那我们就是 ruby girls 了呢」</p>
+<p>梨子「ruby girls，听起来不错呢」</p>
+<p>黛雅「『学而时习之，不亦说乎』要掌握知识还得要多加练习」</p>
+<p>千歌「嗯，为了成为更加闪耀的 ruby girl，还要继续努力练习啊，大家一起加油吧」</p>
+<p>众人「哦～～」</p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>Aqours</tag>
+        <tag>Ruby</tag>
+        <tag>元编程</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>用 caddy git 为 Hexo 博客自动更新</title>
+    <url>/2018/06/04/caddyHexo/</url>
+    <content><![CDATA[<h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>听闻萎软要收购 github，真是💊。本来 github 运营时氛围中立，倒向萎软必然引发顾虑。破坏良好的社区讨论氛围。因此决定自行架设代码托管服务。</p>
+<p>gitea 较为轻量，占用资源少，选用此 app 架设。之后将 blog clone 到 gitea。因为自有了代码托管，想到是否能用 hook 使其自动更新，因此参考 nickfan 的 <a href="https://nickfan.github.io/2018/01/05/caddy-hugo-acme/" target="_blank" rel="noopener">阿熊的Caddy+Hugo+Acme.sh配置填坑笔记</a> 一文配置 caddy。</p>
+<h2 id="设定"><a href="#设定" class="headerlink" title="设定"></a>设定</h2><p>设定 Caddyfile 为：</p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><span class="line">blog.ckyol.moe &#123; &#x2F;&#x2F;地址</span><br><span class="line">    root &#x2F;var&#x2F;www&#x2F;hexo </span><br><span class="line">    git git.ckyol.moe&#x2F;ckyOL&#x2F;blog &#123; &#x2F;&#x2F;git地址</span><br><span class="line">        path &#x2F;var&#x2F;www&#x2F;hexo &#x2F;&#x2F;文件存放路径</span><br><span class="line">        hook &#x2F;webhook [secret] &#x2F;&#x2F;webhook 路径与 secret </span><br><span class="line">        hook_type gogs &#x2F;&#x2F;hook 类别，暂时不支援 gitea</span><br><span class="line">        clone_args --recursive &#x2F;&#x2F;clone 选项</span><br><span class="line">        pull_args --recurse-submodules &#x2F;&#x2F;pull 选项</span><br><span class="line">    &#125;</span><br><span class="line">    gzip</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="坑"><a href="#坑" class="headerlink" title="坑"></a>坑</h2><p>之后发现 caddy 启动失败，原来 caddy 启动不能动态加载，blog 需访问的 git 地址没有加载，因此启动失败。更改为 github 地址后测试成功。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>caddy git 更新需在启动时能访问其地址。可以交叉放置（两人互相 push 到对方服务器）。hexo 由于预先生成静态网页，就不需要像 hugo 添加 <code>then</code> 语句。</p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>hexo</tag>
+        <tag>caddy</tag>
+        <tag>git</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>现今数据滥用现状与对策</title>
+    <url>/2018/05/28/dataMisuse/</url>
+    <content><![CDATA[<h2 id="现状"><a href="#现状" class="headerlink" title="现状"></a>现状</h2><h3 id="价格歧视"><a href="#价格歧视" class="headerlink" title="价格歧视"></a>价格歧视</h3><blockquote>
+<p>价格歧视（Price discrimination）是独占者对同一种物品向某些消费者收取的价格高于另一些消费者，或者对少量购买的消费者收取的价格高于大量购买的消费者。通常以顾客对象、地区……等特性作为区分。但并不是所有的价格差别都是价格歧视。<br><a href="https://zh.wikipedia.org/wiki/%E4%BB%B7%E6%A0%BC%E6%AD%A7%E8%A7%86" target="_blank" rel="noopener">wiki</a></p>
+</blockquote>
+<p>资本家为最求利益最大化，针对不同消费者制定不同价格，最大化榨取剩余价值。在前互联网时代，资本家对消费者习惯了解程度不高，制定的价格策略不够精细。而如今可以通过大量数据获取每一个消费者精确的消费习惯，展现不同价格，由此榨取剩余价值最大化。</p>
+<h3 id="大数据杀熟"><a href="#大数据杀熟" class="headerlink" title="大数据杀熟"></a>大数据杀熟</h3><p>现在最明显的为大数据杀熟，如🐸乎问答展现各厂丑恶行径</p>
+<p><a href="https://www.zhihu.com/question/268104462" target="_blank" rel="noopener">如何看待大数据「杀熟」</a></p>
+<p>各厂利用各种数据刻画消费者模型，如注册时获取的个人信息、消费记录等。由此通过深度学习估算出最适价格。</p>
+<p>另一方面，各厂通过智能家居获取更多隐私数据。如果说以前只能获得消费者主动产生的数据，如今通过各类传感器就可以获得消费者被动产生的数据，如室内气温、饮水、空气、摄像头、出入记录等等。由此对消费者掌控程度大大加深。</p>
+<h2 id="解决"><a href="#解决" class="headerlink" title="解决"></a>解决</h2><h3 id="GDPR"><a href="#GDPR" class="headerlink" title="GDPR"></a>GDPR</h3><p>先进的欧洲在5月25日推行 GDPR（General Data Protection Regulation） 政策<a href="https://zh.wikipedia.org/wiki/%E6%AD%90%E7%9B%9F%E4%B8%80%E8%88%AC%E8%B3%87%E6%96%99%E4%BF%9D%E8%AD%B7%E8%A6%8F%E7%AF%84" target="_blank" rel="noopener">[1]</a>，<a href="http://www.cbdio.com/BigData/2017-02/09/content_5445910.htm" target="_blank" rel="noopener">翻译文本</a>。</p>
+<p>🐸乎这里有篇图文可以看看<a href="https://zhuanlan.zhihu.com/p/29918087" target="_blank" rel="noopener">欧盟GDPR：数据权利和安全责任【信息图】（翻译）</a></p>
+<p>国际大厂在5月陆续更新隐私策略，我朝厂就呵呵了。所以转用国际大厂、欧洲厂产品。</p>
+<h3 id="自架设"><a href="#自架设" class="headerlink" title="自架设"></a>自架设</h3><p>开源界为人民信息自由作出巨大贡献。许多服务都可自架设，如RSS——<a href="https://tt-rss.org/" target="_blank" rel="noopener">tiny tiny rss</a>、bbs——<a href="https://github.com/NodeBB/NodeBB" target="_blank" rel="noopener">nodeBB</a>、聊天室<a href="https://matrix.org/blog/home/" target="_blank" rel="noopener">matrix</a>、微博客<a href="https://github.com/tootsuite/mastodon" target="_blank" rel="noopener">mastodon</a>等等。由此获得与各厂产品同等体验的同时把数据留在自己服务器中。自己掌握实体服务器最为安全，若不能，使用VPS。VPS运营商就算获取到信息也不能用做训练集，更不会交给大厂。</p>
+<h3 id="自造智能家居"><a href="#自造智能家居" class="headerlink" title="自造智能家居"></a>自造智能家居</h3><p>现今有廉价芯片 esp8266 较适宜，其集成 wifi 芯片，兼容 arduino。可刷 <a href="https://www.letscontrolit.com/wiki/index.php/ESPEasy" target="_blank" rel="noopener">espeasy</a> 固件控制各类传感器。</p>
+<p>买板子 nodeMCU 最方便使用，其集成TTL直接用usb线连接刷板子。<a href="https://s.taobao.com/search?q=nodemcu&imgfile=&commend=all&ssid=s5-e&search_type=item&sourceId=tb.index&spm=a21bo.2017.201856-taobao-item.1&ie=utf8&initiative_id=tbindexz_20170306" target="_blank" rel="noopener">某宝十几块</a></p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>因此安全性：自己服务器/自造智能家居 &gt; VPS 架设 &gt; 遵守 GDPR 的厂产品</p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>大数据</tag>
+        <tag>开源</tag>
+        <tag>阶级斗争</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Aqours 歌曲生命周期统计</title>
+    <url>/2018/05/02/songLifeCycle/</url>
+    <content><![CDATA[<h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>今日在水水群聊起 3rd live，接着发现这三单出了这么久还没四单，生命周期真长。再看小队单也是差不多同一批次，这其中貌似隐藏着某些规律，故统计分析一番。</p>
+<h2 id="生命周期"><a href="#生命周期" class="headerlink" title="生命周期"></a>生命周期</h2><p>首先定义一下生命周期。<strong>生命周期（Life Cycle）</strong>为歌曲一张发行至下一张发行时所经历的时间。如《君のこころは輝いてるかい？》在2015年10月7日发行，《恋になりたいAQUARIUM》在2016年4月27日发行，则一单的生命周期为2015年10月7日至2016年4月27日的 <strong>6个月20天</strong>。</p>
+<h2 id="图形绘制"><a href="#图形绘制" class="headerlink" title="图形绘制"></a>图形绘制</h2><p>一开始当然想用 python 画图，搜一圈没发现什么优雅甘特图绘画包，这时想起JS也有数据可视化库，一艘发现 google chart 有 <a href="https://developers.google.com/chart/interactive/docs/gallery/timeline" target="_blank" rel="noopener">Timelines</a> 。其优雅美观，使用方便，故选用画图。</p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line">google.charts.load(<span class="string">"current"</span>, &#123;<span class="attr">packages</span>:[<span class="string">"timeline"</span>]&#125;);</span><br><span class="line">google.charts.setOnLoadCallback(drawChart);</span><br><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">drawChart</span>(<span class="params"></span>) </span>&#123;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">var</span> container = <span class="built_in">document</span>.getElementById(<span class="string">'chart'</span>);</span><br><span class="line">  <span class="keyword">var</span> chart = <span class="keyword">new</span> google.visualization.Timeline(container);</span><br><span class="line">  <span class="keyword">var</span> dataTable = <span class="keyword">new</span> google.visualization.DataTable();</span><br><span class="line">  dataTable.addColumn(&#123; <span class="attr">type</span>: <span class="string">'string'</span>, <span class="attr">id</span>: <span class="string">'Position'</span> &#125;);</span><br><span class="line">  dataTable.addColumn(&#123; <span class="attr">type</span>: <span class="string">'string'</span>, <span class="attr">id</span>: <span class="string">'Name'</span> &#125;);</span><br><span class="line">  dataTable.addColumn(&#123; <span class="attr">type</span>: <span class="string">'date'</span>, <span class="attr">id</span>: <span class="string">'Start'</span> &#125;);</span><br><span class="line">  dataTable.addColumn(&#123; <span class="attr">type</span>: <span class="string">'date'</span>, <span class="attr">id</span>: <span class="string">'End'</span> &#125;);</span><br><span class="line">  dataTable.addRows([</span><br><span class="line">    [ <span class="string">'单曲'</span>, <span class="string">'君こころ'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2015</span>,<span class="number">10</span>,<span class="number">7</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2016</span>,<span class="number">4</span>,<span class="number">27</span>) ],</span><br><span class="line">    [ <span class="string">'单曲'</span>, <span class="string">'恋Aqua'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2016</span>,<span class="number">4</span>,<span class="number">27</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">4</span>,<span class="number">5</span>) ],</span><br><span class="line">    [ <span class="string">'单曲'</span>, <span class="string">'HPT'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">4</span>,<span class="number">5</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2018</span>,<span class="number">5</span>,<span class="number">2</span>) ],</span><br><span class="line">    [<span class="string">'CYaRon'</span>, <span class="string">'元気'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2016</span>,<span class="number">5</span>,<span class="number">11</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">5</span>,<span class="number">10</span>)],</span><br><span class="line">    [<span class="string">'CYaRon'</span>, <span class="string">'近未来'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">5</span>,<span class="number">10</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2018</span>,<span class="number">5</span>,<span class="number">2</span>)],</span><br><span class="line">    [<span class="string">'AZALEA'</span>, <span class="string">'トリコ'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2016</span>,<span class="number">5</span>,<span class="number">25</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">5</span>,<span class="number">31</span>)],</span><br><span class="line">    [<span class="string">'AZALEA'</span>, <span class="string">'GHS'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">5</span>,<span class="number">31</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2018</span>,<span class="number">5</span>,<span class="number">2</span>)],</span><br><span class="line">    [<span class="string">'GK'</span>, <span class="string">'ST'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2016</span>,<span class="number">6</span>,<span class="number">8</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">6</span>,<span class="number">21</span>)],</span><br><span class="line">    [<span class="string">'GK'</span>, <span class="string">'コワヤス'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">6</span>,<span class="number">21</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2018</span>,<span class="number">5</span>,<span class="number">2</span>)],</span><br><span class="line"></span><br><span class="line">  ]);</span><br><span class="line"></span><br><span class="line">  chart.draw(dataTable);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>只要在 dataTable 中 addRows 加入起止日期即可画出时间端。</p>
+<h2 id="统计"><a href="#统计" class="headerlink" title="统计"></a>统计</h2><center>
+表 1 生命周期统计表（日期数据为年月日，截止2018.5.2）
+</center>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>单曲</td>
+<td>0,6,20</td>
+<td>0,11,8</td>
+<td>1,0,28</td>
+</tr>
+<tr>
+<td>CYaRon</td>
+<td>0,11,30</td>
+<td>0,11,28</td>
+<td></td>
+</tr>
+<tr>
+<td>AZALEA</td>
+<td>1,0,6</td>
+<td>0,11,1</td>
+<td></td>
+</tr>
+<tr>
+<td>Guilty Kiss</td>
+<td>1,0,13</td>
+<td>0,10,12</td>
+<td></td>
+</tr>
+</tbody></table>
+<p>观察表1发现，单曲生命周期逐渐增常，联想3单发售的2017年各类活动大量增加，故没时间录制4单。CYaRon 生命周期较接近，为近12月。其他小队1单生命周期长而显得2单未超越。纵向比较，CYaRon 至 GK 生命周期增加，推测依曲风制作难度增加，需要更多时间。</p>
+<p>若小队单符合周期，则近期应有小队单发售。而如今未有消息，说明制作周期增加。</p>
+<h2 id="成果"><a href="#成果" class="headerlink" title="成果"></a>成果</h2><p>html 传至 VPS，<a href="https://chart.ckyol.moe/life.html" target="_blank" rel="noopener">点击访问</a></p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+        <category>ACG</category>
+      </categories>
+      <tags>
+        <tag>LoveLive</tag>
+        <tag>Aqours</tag>
+        <tag>水学</tag>
+        <tag>生命周期统计</tag>
+        <tag>JavaScript</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Twitter 名称自动更新天气 emoji 的实现</title>
+    <url>/2018/04/16/tweetWeaName/</url>
+    <content><![CDATA[<h2 id="启发"><a href="#启发" class="headerlink" title="启发"></a>启发</h2><p>最近逛 Qiita 时看到这篇文章：</p>
+<blockquote>
+<p>Twitterの名前を5分毎に東京の天気☼☂☃と連動させるサーバレスプログラムを書いたら色々知らないことが出てきた話<br><a href="https://qiita.com/issei_y/items/ab641746be2704db98be" target="_blank" rel="noopener">https://qiita.com/issei_y/items/ab641746be2704db98be</a></p>
+</blockquote>
+<p>其通过 AWSLambda 来定期运行更新任务，我既有了 VPS 就不用 AWS 啦。因此用 python 写个 app 来跑。</p>
+<h2 id="App"><a href="#App" class="headerlink" title="App"></a>App</h2><h3 id="天气"><a href="#天气" class="headerlink" title="天气"></a>天气</h3><p>获取天气信息如文中选用 OpenWeatherMap 的 API。用 requests GET 得 json 后取得 icon 字段数据</p>
+<p>json 样本</p>
+<figure class="highlight json"><table><tr><td class="code"><pre><span class="line">&#123;</span><br><span class="line">    <span class="attr">"coord"</span>: &#123;</span><br><span class="line">        <span class="attr">"lon"</span>: <span class="number">145.77</span>,</span><br><span class="line">        <span class="attr">"lat"</span>: <span class="number">-16.92</span></span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="attr">"weather"</span>: [</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="attr">"id"</span>: <span class="number">802</span>,</span><br><span class="line">            <span class="attr">"main"</span>: <span class="string">"Clouds"</span>,</span><br><span class="line">            <span class="attr">"description"</span>: <span class="string">"scattered clouds"</span>,</span><br><span class="line">            <span class="attr">"icon"</span>: <span class="string">"03n"</span></span><br><span class="line">        &#125;</span><br><span class="line">    ],</span><br><span class="line">    <span class="attr">"base"</span>: <span class="string">"stations"</span>,</span><br><span class="line">    <span class="attr">"main"</span>: &#123;</span><br><span class="line">        <span class="attr">"temp"</span>: <span class="number">300.15</span>,</span><br><span class="line">        <span class="attr">"pressure"</span>: <span class="number">1007</span>,</span><br><span class="line">        <span class="attr">"humidity"</span>: <span class="number">74</span>,</span><br><span class="line">        <span class="attr">"temp_min"</span>: <span class="number">300.15</span>,</span><br><span class="line">        <span class="attr">"temp_max"</span>: <span class="number">300.15</span></span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="attr">"visibility"</span>: <span class="number">10000</span>,</span><br><span class="line">    <span class="attr">"wind"</span>: &#123;</span><br><span class="line">        <span class="attr">"speed"</span>: <span class="number">3.6</span>,</span><br><span class="line">        <span class="attr">"deg"</span>: <span class="number">160</span></span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="attr">"clouds"</span>: &#123;</span><br><span class="line">        <span class="attr">"all"</span>: <span class="number">40</span></span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="attr">"dt"</span>: <span class="number">1485790200</span>,</span><br><span class="line">    <span class="attr">"sys"</span>: &#123;</span><br><span class="line">        <span class="attr">"type"</span>: <span class="number">1</span>,</span><br><span class="line">        <span class="attr">"id"</span>: <span class="number">8166</span>,</span><br><span class="line">        <span class="attr">"message"</span>: <span class="number">0.2064</span>,</span><br><span class="line">        <span class="attr">"country"</span>: <span class="string">"AU"</span>,</span><br><span class="line">        <span class="attr">"sunrise"</span>: <span class="number">1485720272</span>,</span><br><span class="line">        <span class="attr">"sunset"</span>: <span class="number">1485766550</span></span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="attr">"id"</span>: <span class="number">2172797</span>,</span><br><span class="line">    <span class="attr">"name"</span>: <span class="string">"Cairns"</span>,</span><br><span class="line">    <span class="attr">"cod"</span>: <span class="number">200</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="emoji-转换"><a href="#emoji-转换" class="headerlink" title="emoji 转换"></a>emoji 转换</h3><p>为 <del>偷懒</del> 简化程序，直接通过 icon 字段来转换 emoji。可见 <a href="https://openweathermap.org/weather-conditions" target="_blank" rel="noopener">Weather Conditions</a></p>
+<p>python 没 switch/case，采用 dict 映射</p>
+<h3 id="Twitter-名更新"><a href="#Twitter-名更新" class="headerlink" title="Twitter 名更新"></a>Twitter 名更新</h3><p>选用 <a href="http://www.tweepy.org/" target="_blank" rel="noopener">tweepy</a><br>来更新 twitter 名，参见 <a href="http://tweepy.readthedocs.io/en/v3.5.0/" target="_blank" rel="noopener">doc</a></p>
+<h3 id="自动更新"><a href="#自动更新" class="headerlink" title="自动更新"></a>自动更新</h3><p>采用 APScheduler 来定时更新。可以设定时间点、时间间隔。</p>
+<h2 id="成品"><a href="#成品" class="headerlink" title="成品"></a>成品</h2><h3 id="github"><a href="#github" class="headerlink" title="github"></a>github</h3><p>已 po 去 <del>gay </del>github <a href="https://github.com/ckyOL/twitterWeatherName" target="_blank" rel="noopener">twitterWeatherName</a></p>
+<h3 id="Docker"><a href="#Docker" class="headerlink" title="Docker"></a>Docker</h3><p>已 push 去 dockerhub <a href="https://hub.docker.com/r/ckyol/twitter-weather-name/" target="_blank" rel="noopener">docker</a></p>
+<h2 id="再开脑洞"><a href="#再开脑洞" class="headerlink" title="再开脑洞"></a>再开脑洞</h2><p>联结 homeassistant 自动化，监测自宅温度更新 twitter。联结其他web服务等等。</p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>Python</tag>
+        <tag>Twitter</tag>
+        <tag>OpenWeatherMap</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>迁移至 Linode</title>
+    <url>/2018/03/01/transLinode/</url>
+    <content><![CDATA[<h2 id="到期"><a href="#到期" class="headerlink" title="到期"></a>到期</h2><p>先前使用 vultr VPS，赶上充多少送多少活动，以半价用了10个月，到今年已是余额耗尽，因此寻觅新 VPS。vultr 近来线路越来越差，寻思linode 为大厂，其 VPS 质量应该较好，因此选用 linode。</p>
+<h2 id="迁移"><a href="#迁移" class="headerlink" title="迁移"></a>迁移</h2><p>linode 近来再搞新用户送20刀活动（优惠码：podcastinit2018）另提供本人邀请 <a href="https://www.linode.com/?r=06ecb209807effbafa69c6096210e708aee613d4" target="_blank" rel="noopener">链接</a></p>
+<h2 id="caddy"><a href="#caddy" class="headerlink" title="caddy"></a>caddy</h2><p>迁移新气象，顺带换掉了老久的 nginx。caddy较之，配置十分方便。Go 语言写的 app 越来越多，其在 web 界开辟了未来。</p>
+]]></content>
+      <categories>
+        <category>日志</category>
+      </categories>
+      <tags>
+        <tag>linode</tag>
+        <tag>迁移</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>电子支付学（暂定）用语一览</title>
+    <url>/2018/01/09/electronicPensiographyTerm/</url>
+    <content><![CDATA[<h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>随着对电子支付研究深入，渐渐总结出一些概念。本篇将其定义，也是对前两篇 <a href="https://blog.ckyol.moe/2017/08/27/futurePayment/">[1]</a>,<a href="https://blog.ckyol.moe/2017/11/01/futurePaymentSec/">[2]</a> 的总结</p>
+<h2 id="支付体系与支付运营商"><a href="#支付体系与支付运营商" class="headerlink" title="支付体系与支付运营商"></a>支付体系与支付运营商</h2><p><strong>支付体系（Payment system）</strong>：指支付中资金流通所经流的渠道</p>
+<p><strong>支付运营商（Payment operators）</strong>：指提供支付服务的组织</p>
+<h3 id="支付体系"><a href="#支付体系" class="headerlink" title="支付体系"></a>支付体系</h3><p><strong>开放体系（Open system）</strong>：指支付体系中支付运营商间、支付运营商与商户使用共同的体系</p>
+<p><strong>封闭体系（Closed system）</strong>：指支付体系中支付运营商间、支付运营商与商户使用各自的体系</p>
+<h3 id="支付运营商"><a href="#支付运营商" class="headerlink" title="支付运营商"></a>支付运营商</h3><p><strong>银行系（Bank）</strong>：由各类银行组成的使用Visa、Master、银联、JCB等开放体系的一类支付运营商</p>
+<p><strong>交通系（Transport）</strong>：由各类交通业者所采用的非接触卡运营商所组成的一类支付运营商，如Suica、八达通、羊城通等。部分实现互联互通</p>
+<p><strong>第三方系（Third party）</strong>：由其他整合银行账户或交通账户来提供服务的一类支付运营商，如Paypal、支付宝等</p>
+<h2 id="支付手段"><a href="#支付手段" class="headerlink" title="支付手段"></a>支付手段</h2><p><strong>支付手段（Payment method）</strong>：指交易中两方所使用的工具</p>
+<p><strong>磁条式（Magnetic stripe）</strong>：使用磁条储存信息，由POS机读取信息、识别</p>
+<p><strong>芯片式（chip）</strong>：使用芯片储存信息，由POS机读取信息、识别</p>
+<p><strong>非接触式（Contactless）</strong>：使用芯片储存信息，感应交换信息，由闸机、POS机识别。有NFC、Felica技术</p>
+<p><strong>二维码式(QR code)</strong>：使用二维码储存信息，由扫码枪、手机镜头读取、识别</p>
+<h2 id="商家收款"><a href="#商家收款" class="headerlink" title="商家收款"></a>商家收款</h2><p><strong>支付模型（Payment model）</strong>：资金由付款方到收款方的完整链路</p>
+<p><img src="https://i.imgur.com/DgjAKhU.png" alt=""></p>
+<center>图1 支付模型示意图（开放体系）</center>
+
+<hr>
+<p>简写：</p>
+<p>发出方–&gt;[支付运营商]–体系–&gt;(手段)–&gt;接收方</p>
+<p>共用一个体系可用逗号符号分割，不同体系同一接收方用「/」,「\」符号转角</p>
+<blockquote>
+<p>例子：</p>
+</blockquote>
+<blockquote>
+<figure class="highlight plain"><table><tr><td class="code"><pre><span class="line">                                &#x2F;(Chip)\</span><br><span class="line">Sender--&gt;[HSBC, BOC, BOA]--Visa--&gt;(NFC)--&gt;Reciver</span><br><span class="line"></span><br><span class="line">       &#x2F;-[Alipay]--Alipay--\</span><br><span class="line">Sender--&gt;[Wechat]--Wechat--&gt;(QR code)--&gt;Reciver</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+</blockquote>
+<h2 id="唤起"><a href="#唤起" class="headerlink" title="唤起"></a>唤起</h2><p><strong>唤起（Call up）</strong>：指支付方开启支付的过程</p>
+<p><strong>自动唤起（Auto call up）</strong>：指支付方开启支付时由工具完成唤起，支付方无需特殊操作，如非接触式感应</p>
+<p><strong>手动唤起（Manual call up）</strong>：指支付方启动支付工具需要手动操作进行唤起，如二维码式需要调出二维码</p>
+<p>衍生：唤起时间（call up cost）</p>
+<h2 id="个人收付款"><a href="#个人收付款" class="headerlink" title="个人收付款"></a>个人收付款</h2><h3 id="银行系"><a href="#银行系" class="headerlink" title="银行系"></a>银行系</h3><p>银行内部转账：A–&gt;[Bank]–internal–&gt;B</p>
+<p>银行间转账：A–&gt;[Bank A]–Gateway–&gt;[Bank B]–&gt;B</p>
+<p>汇款：A–&gt;[Bank A]–International Gateway–&gt;[Bank B]–&gt;B</p>
+<h3 id="第三方系"><a href="#第三方系" class="headerlink" title="第三方系"></a>第三方系</h3><p>内部转账：A–&gt;[Alipay]–internal–&gt;B</p>
+<p>运营商间转账（x表示不可行）：A–&gt;[Alipay]–Gateway–x–&gt;[Wechat]–&gt;B</p>
+]]></content>
+      <categories>
+        <category>评论</category>
+      </categories>
+      <tags>
+        <tag>电子支付</tag>
+        <tag>概念</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Aqours 歌词词频统计与分析</title>
+    <url>/2017/11/05/aqoursLyricsCount/</url>
+    <content><![CDATA[<h2 id="引言"><a href="#引言" class="headerlink" title="引言"></a>引言</h2><p>随着二期アニメ放送，水学研究进入新阶段。现今水学研究多着眼于对一首歌词情感分析，在整体统计领域鲜见研究。因此本文使用统计学手法对全曲歌词进行词频统计，希望能对 Aqours 词风进行更深刻的分析。</p>
+<h2 id="歌词获取"><a href="#歌词获取" class="headerlink" title="歌词获取"></a>歌词获取</h2><p>黄易云音乐是我朝较流行在线音乐服务，对于歌词获取相关 API 较完善，故选用本服务进行歌词爬取。由于 Aqours 曲目中存在广播剧、伴奏等无关内容，因此不宜从单曲进行获取。在黄易云上有许多水水人整理好的歌单，因此直接利用。</p>
+<p>获取思路：</p>
+<ol>
+<li>由歌单id获取歌曲id</li>
+<li>由歌曲id获得歌词</li>
+</ol>
+<p>利用 requests 即可抓取网页，由此获得 id。参考相关代码，作 <code>getMusicID</code>、<code>getLyrics</code>函数。获取歌词写入文本。</p>
+<h2 id="分词"><a href="#分词" class="headerlink" title="分词"></a>分词</h2><p>日语分词工具 MeCab 对 python 支援较好，因此选用本工具。在歌词中只有名词、形容词、动词对曲风分析有意义，因此还需对词性分析。参考 iruca さん的<a href="http://www.iruca21.com/entry/2016/01/03/220804" target="_blank" rel="noopener">文章</a>作<code>extractWord</code>、<code>makeHistogram</code>、<code>map2Csv</code>函数。分词获取指定词性词汇，用 Counter 统计次数，转换为 string 用于存储。</p>
+<p>由于 mecab 一次只分析一句话，因此将歌词合并成一个 string 后分析。</p>
+<p>取得词频信息结构为</p>
+<table>
+<thead>
+<tr>
+<th>word</th>
+<th>count</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>夢</td>
+<td>５</td>
+</tr>
+</tbody></table>
+<h2 id="统计作图"><a href="#统计作图" class="headerlink" title="统计作图"></a>统计作图</h2><p>此时获得词频信息后就可以作图。这里使用 pandas 对数据进行排序，之后还有合并数据用途。这里使用<code>os.listdir</code>函数获取到目录所有文件，注意排除如<code>.DS_Store</code>等隐藏文件的干扰。之后使用 matplotlib 画柱状图。由于歌曲词量较多，可以选取前50作图。</p>
+<h2 id="全统计"><a href="#全统计" class="headerlink" title="全统计"></a>全统计</h2><p>由于先前只是统计单首歌曲词频，要对全曲分析需进行合并。使用 pandas 读取各曲数据合并。由于各曲词汇不同，在 merge 时使用 outer 合并。由此产生多列与NaN，偷懒倒出后用 Numbers.app 统计求和。之后将总和数据读入、排序后作图。</p>
+<h2 id="分析"><a href="#分析" class="headerlink" title="分析"></a>分析</h2><p>排除语法成分后作图得</p>
+<p><img src="https://i.imgur.com/CqHo67D.png" alt=""></p>
+<center>图1 Aqours 歌词词频分布</center>
+
+<p>观察前50词，出现的为私、夢、みんな、ある、君、いい、なる、キミ、恋、待っ、誰、未来、想い、見、手、人、たち、時、I、胸、ここ、声、みたい、Guilty、Night、いつか、目、謎、一緒、夏、今、僕、心等意象。由此可见 aqours 以梦想为主要题材，正应了黛雅所说需要创新（二期5话）。次之有みんな、君、人、たち表明与他人的互动，既是 aqours 的众人也是与我们水水人。再看有恋、未来、想い、時、胸、声等意象让人联想到一期插曲、二单，也是说明 aqours 的追梦情节。可见 aqours 词风还是十分正统偶像风。</p>
+<h2 id="结论"><a href="#结论" class="headerlink" title="结论"></a>结论</h2><p>本文通过抓取歌词、词频分析成功分析了 aqours 全曲词风，使用统计学方法使研究成果更具科学性。</p>
+<h2 id="附录"><a href="#附录" class="headerlink" title="附录"></a>附录</h2><p>全曲统计信息与作图信息已打包上传至mega，可下载分析。<a href="https://mega.nz/#!cctQUD4K!KMmjfYe1MgTzWjkUA4U-nXcxxE1UAY0wkXw_N7wSOzg" target="_blank" rel="noopener">地址</a></p>
+<p>其中 all.csv 为单纯合并数据、total.csv 为去多余列数据。</p>
+<p>代码全部上传 github <a href="https://github.com/ckyOL/aqoursLyricsCount" target="_blank" rel="noopener">ckyOL/aqoursLyricsCount</a></p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+        <category>ACG</category>
+      </categories>
+      <tags>
+        <tag>LoveLive</tag>
+        <tag>Aqours</tag>
+        <tag>词频统计</tag>
+        <tag>Python</tag>
+        <tag>水学</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>为了更美好的未来支付（二）</title>
+    <url>/2017/11/01/futurePaymentSec/</url>
+    <content><![CDATA[<h2 id="还是谈支付体系"><a href="#还是谈支付体系" class="headerlink" title="还是谈支付体系"></a>还是谈支付体系</h2><p><a href="http://blog.ckyol.moe/2017/08/27/futurePayment/">前文</a>说到自有支付体系与接入卡组织体系之差别。今次从个人与商家收款谈开放支付体系与封闭体系。</p>
+<h3 id="商家收款"><a href="#商家收款" class="headerlink" title="商家收款"></a>商家收款</h3><p>支付宝、微信也许是由于我朝的限制，没得发行银行卡才不得不走自有体系。（旧闻：<a href="http://bank.jrj.com.cn/focus/lcgc169/" target="_blank" rel="noopener">央行紧急叫停虚拟信用卡</a>)。而国外则没有限制，广泛采用发行虚拟卡。如 <a href="https://www.mun-prepaid.com/" target="_blank" rel="noopener">eさいふ</a>、<a href="vpc.lifecard.co.jp">Vプリカ</a>等预付卡，Tap&amp;go的master卡，都是直接利用现成的卡组织体系。透过卡组织的耕耘，可以便捷快速的支援全世界的商家，享用新技术支持（NFC）。远比吃力不讨好的铺开自有体系方便。卡组织这种开放的体系，对于商家，只需支援卡组织就可以接受各电子支付提供商的付款，无需支援千万家电子支付提供商。对于个人，不用担心商家不支援自己的电子支付提供商就可以自由付款。对两方都是十分友好的，在这一方面虚拟卡优胜。</p>
+<h3 id="个人收款"><a href="#个人收款" class="headerlink" title="个人收款"></a>个人收款</h3><p>在前电子支付时代，个人收付款多用银行转账。也许是各电子支付商接入了卡组织体系，对此解决方式就不太好了。受制于银行卡体系，个人没有商家所用的POS机，只能使用银行转账。对此向支付宝、Line Pay、Tap&amp;go等只能创立自有体系支援。感觉更像是现金的电子化。这一方面部分虚拟卡惜败。</p>
+<h2 id="开放体系与自有体系"><a href="#开放体系与自有体系" class="headerlink" title="开放体系与自有体系"></a>开放体系与自有体系</h2><p>这时有人就要说：「既然个人收付款要用到自有体系，那显然是自有体系优于开放体系」。其实不然，没有开放体系各电子支付提供商间不互通，造成各提供商用家间不能互相转账。为此注册许多账号又十分麻烦。因此还是需要开放体系将其打通。</p>
+<p>在我朝由于两大电子支付提供商垄断，对此感悟不深。说说在香港的情况，香港则有5家电子支付提供商：Tap&amp;go、TNG、O！ePay、支付宝、微信。商家对各家支援程度不一，个人转账由于5家分散就麻烦了。</p>
+<p>香港金融局这时带来福音，先看新闻一则</p>
+<blockquote>
+<h4 id="本港將推快速支付系統-陳德霖稱跨系統交易屬全球領先"><a href="#本港將推快速支付系統-陳德霖稱跨系統交易屬全球領先" class="headerlink" title="本港將推快速支付系統　陳德霖稱跨系統交易屬全球領先"></a>本港將推快速支付系統　陳德霖稱跨系統交易屬全球領先</h4><p>金管局昨日公布多項措施推動本港金融科技發展，包括在明年9月推出快速支付系統。總裁陳德霖表示，系統可實現零售小額支付「全接通」，個人與個人之間無論各自使用甚麼銀行或支付系統的用戶，都可以實時支付或收款。</p>
+</blockquote>
+<blockquote>
+<p>陳德霖在電台節目表示，內地即使有兩大流動支付系統，即支付寶及微信，但系統間不能互通。香港將會推出的則可支援跨系統交易，按他理解是在全球領先。</p>
+</blockquote>
+<blockquote>
+<p>陳德霖又說，香港個人與個人的支付系統發展起步較慢，不過他認為香港可以積極進取，做到後發先至。</p>
+</blockquote>
+<blockquote>
+<p><a href="http://news.rthk.hk/rthk/ch/component/k2/1356719-20170930.htm" target="_blank" rel="noopener">原文链接</a></p>
+</blockquote>
+<p>在香港也存在5家电子支付提供商，要是互通则实现商家收款与个人收款的开放化。用家不必局限于一家提供商，自由选择都可以完成收付款。</p>
+<h2 id="结论"><a href="#结论" class="headerlink" title="结论"></a>结论</h2><p>由此电子支付的先进性不是只看支付手段的先进有否，而是支付体系的先进。卡组织虽然早已有之，但其支付手段也是与时俱进。更换一种新的方式并不是像科技壁垒难以突破，要支援二维码分分钟完成，况且二维码也不先进。而支付体系的建立则不是一朝一夕能完成。</p>
+]]></content>
+      <categories>
+        <category>评论</category>
+      </categories>
+      <tags>
+        <tag>个人收款</tag>
+        <tag>商家收款</tag>
+        <tag>开放体系</tag>
+        <tag>封闭体系</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>为了更美好的未来支付</title>
+    <url>/2017/08/27/futurePayment/</url>
+    <content><![CDATA[<h2 id="电子支付现状"><a href="#电子支付现状" class="headerlink" title="电子支付现状"></a>电子支付现状</h2><p>在现今电子支付领域有系统系的各类Pay（Apple Pay、Android Pay），厂商系的各类Pay（三爽Pay、🐒米Pay等），交通系各类卡（Suica、八达通、岭南通等）、第三方支付（支付宝、微信、Tap&amp;go、O！ePay等）。</p>
+<p>现今支付宝、微信的大火让某些粉红高潮迭起，好似要一统全球。而支付宝、微信的二维码支付真的先进么？我看未必。</p>
+<h2 id="支付体系与支付手段"><a href="#支付体系与支付手段" class="headerlink" title="支付体系与支付手段"></a>支付体系与支付手段</h2><p>观察各类支付，本质分为支付体系与支付手段。像银行卡账号、支付宝账号等所用的体系是支付体系，磁条、芯片卡、二维码、NFC是支付手段。而二者可以排列组合。</p>
+<p>表1 常见支付的体系与手段</p>
+<table>
+<thead>
+<tr>
+<th>支付产品</th>
+<th>体系</th>
+<th>手段</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>银行卡</td>
+<td>卡组织（VISA、银联等）</td>
+<td>磁条、芯片、NFC</td>
+</tr>
+<tr>
+<td>银联支付码</td>
+<td>卡组织（VISA、银联等）</td>
+<td>二维码</td>
+</tr>
+<tr>
+<td>Apple Pay</td>
+<td>卡组织、交通系账户（Suica）</td>
+<td>NFC</td>
+</tr>
+<tr>
+<td>交通系</td>
+<td>交通结算体系</td>
+<td>NFC</td>
+</tr>
+<tr>
+<td>O！ePay</td>
+<td>自有（但与交通系关系紧密）</td>
+<td>NFC</td>
+</tr>
+<tr>
+<td>Tap&amp;go</td>
+<td>自有、卡组织（Master）</td>
+<td>NFC</td>
+</tr>
+<tr>
+<td>支付宝、微信</td>
+<td>自有体系</td>
+<td>二维码</td>
+</tr>
+</tbody></table>
+<p>由此可见同一种支付体系可以选择不同的支付手段，同一种支付手段也有不同支付体系。</p>
+<h2 id="支付体系差异"><a href="#支付体系差异" class="headerlink" title="支付体系差异"></a>支付体系差异</h2><p>在传统支付体系（卡组织、交通系）中经过一些努力，互相之间达成互通。银行卡不管是哪国、哪个银行发行，只要是一个卡组织即可通刷。交通系如岛国各卡互通也可以畅行全国。因此这些可看作一种开放的支付体系。</p>
+<p>甚至吸引自有体系厂商也纳入通用体系。如Tap&amp;go发行预付卡，将自有体系接入现成卡组织体系，省却与商家谈判。八达通为解决快速转账则另立自有体系（<a href="http://www.oepay.com.hk/tc/index.html" target="_blank" rel="noopener">O！ePay</a>），但与现有交通体系结合紧密，两者可互相存取。</p>
+<p><img src="http://i.imgur.com/Qw87EYN.png" alt=""></p>
+<p>而支付宝、微信就是另一种情况。这些采用了自有支付体系，不能互通是一方面，在开户时也有局限。支付宝、微信一直说开辟海外市场，不过就是让商家支援其体系，但本地居民并不能绑定本地银行卡。最终沦为陆客专用，本地人没什么变化。你自认为是「先进」支付工具，却不让别人使用，那是否是一种歧视呢？</p>
+<h2 id="支付手段差异"><a href="#支付手段差异" class="headerlink" title="支付手段差异"></a>支付手段差异</h2><p>观察前互联网时代，大额支付主要采用信用卡支付，小额支付主要是交通系电子钱包。由此解决支付问题的地区，自有体系支付工具的优势只有快速转账。这些旧有手段向互联网时代迁移呈现保留旧有支付体系、更新支付手段的特征。如在互联网时代各网站购物使用信用卡，小额支付使用读卡器读取交通卡，如<a href="http://sc.octopus.com.hk/gb/www.octopus.com.hk/customer-service/octopus-pc-reader-service/tc/index.html" target="_blank" rel="noopener">八达通阅卡服务</a>、<a href="http://www.jreast.co.jp/suicainternetservice/index.html" target="_blank" rel="noopener">Suicaインターネットサービス</a></p>
+<p><img src="http://i.imgur.com/vO7IaYW.png" alt=""></p>
+<p><img src="http://i.imgur.com/nkh6Gb7.png" alt=""></p>
+<p>在现今智能机时代，这些手段显得落后。当然支付手段迁移进程不会停止。如交通系迁移到NFC技术，如Suica在iOS加入Apple Pay、android端使用おサイフケータイ技术的モバイルSuica。另一方面卡组织则借助各类Pay迁移到智能机，使用的同样是NFC。反观支付宝、微信则采用二维码。</p>
+<p>比较NFC、二维码优缺点，NFC有感应快速（快过扫描）、使用方便（无需解锁开App）、成功率高（扫描受环境光、网络影响）等优点，但投入成本较高（手机NFC芯片、商家读卡器）。二维码则成本低廉（直接打印）、商家投入少（手机扫描），但成功率低、使用繁琐。</p>
+<p>支付宝、微信靠二维码快速铺开之后显然有点飘飘然，竟然妄图在车站使用二维码进站。在交通场所这一使用场景追求快速通行，因此需要读取迅速，成功率高。而二维码而使用繁琐、识别率不高。要是都用二维码肯定会形成堵塞，这无疑是一种退步。</p>
+<p>当然支付宝、微信也不是无一是处，自有体系在转账方面有优势，而在其他一些场景就有所不足。因此其需要改进。</p>
+<h2 id="更美好的未来支付"><a href="#更美好的未来支付" class="headerlink" title="更美好的未来支付"></a>更美好的未来支付</h2><p>针对自有体系排他性，可成立类似卡组织的电子支付组织，各支付厂商加入使世界通刷，也方便互相转账。针对二维码缺陷，增加使用NFC。这样各类支付场景都可得到最优体验。理想是有互通体系的依场景使用不同支付手段的支付工具。</p>
+]]></content>
+      <categories>
+        <category>评论</category>
+      </categories>
+      <tags>
+        <tag>电子支付</tag>
+        <tag>二维码</tag>
+        <tag>NFC</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>为 ZBT wg3526 编译 Openwrt snapshots 版相关科学联网 ipk</title>
+    <url>/2017/06/11/openwrtProxyZbt/</url>
+    <content><![CDATA[<h2 id="换路由"><a href="#换路由" class="headerlink" title="换路由"></a>换路由</h2><p>却说先前购入Dlink dir605B1已经服役有6、7年了，期间刷过DDWRT增强功能<del>续命</del>继续服役。但这300M 802.11n路由在现代实在捉襟见肘。恰逢先前叉烧（@orcaXS）路由故障，就将这旧路由<del>出二手</del>转让给他。</p>
+<p>转让路由后开始寻觅新路由，先前和基友学习刷路由界相关知识，大开眼界。看zbt wg3526功能强劲，性价比高。又有openwrt官方支援，因此购入。</p>
+<h2 id="折腾经历"><a href="#折腾经历" class="headerlink" title="折腾经历"></a>折腾经历</h2><p>买得路由后曾刷LEDE，但2.4G完全废了。虽说家里大体普及5GHz，但3DS等落后设备不支援。没办法，刷回openwrt。</p>
+<h2 id="Openwrt"><a href="#Openwrt" class="headerlink" title="Openwrt"></a>Openwrt</h2><p><img src="http://i.imgur.com/UclHmSZ.png" alt="初始版本"></p>
+<p>最新刷了snapshots版本，<img src="http://i.imgur.com/j4rl87W.png" alt="Imgur"></p>
+<p>snapshots版本有个问题就是太新了，现成ipk不支援。按这篇文章<a href="https://cokebar.info/archives/664" target="_blank" rel="noopener">https://cokebar.info/archives/664</a>的教程就下来架构不符。没办法只有自己编译。</p>
+<h2 id="神秘玄学"><a href="#神秘玄学" class="headerlink" title="神秘玄学"></a>神秘玄学</h2><p>为<del>偷懒</del>求便捷，下了ubuntu 17.04，但遇到神秘玄学，make menuconfig 时死活不成，之后换了16.04倒是成了。于是依照各github项目指示编译。这时再安装就没有问题了。</p>
+<p>期间遇到缺乏 libc.so libgcc_s.so 依赖问题，这个要在feeds里添加 uClibcxx</p>
+<h2 id="ipk共享"><a href="#ipk共享" class="headerlink" title="ipk共享"></a>ipk共享</h2><p>于是做个好事，将编译好的ipk分享出来，有同为wg3526机友可以下载安装，包含</p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><span class="line">luci-app-chinadns_1.6.1-1_all.ipk</span><br><span class="line">luci-app-dns-forwarder_1.6.1-1_all.ipk</span><br><span class="line">luci-app-shadowsocks_1.6.3-2_all.ipk</span><br><span class="line">shadowsocks-libev_3.0.6-1_ramips.ipk</span><br><span class="line">libsodium_1.0.12-1_ramips.ipk</span><br><span class="line">libmbedtls_2.4.2-1_ramips.ipk</span><br><span class="line">libudns_0.4-1_ramips.ipk</span><br><span class="line">dns-forwarder_1.2.0-1_ramips.ipk</span><br><span class="line">ChinaDNS_1.3.2-4_ramips.ipk</span><br></pre></td></tr></table></figure>
+
+
+<p> <a href="https://mega.nz/#!BZk3BCLS!Eg-nKaKV41Xbuh9vLczvb7vdvPFC8kJdOBGLjEZEcP4" target="_blank" rel="noopener">下载地址</a></p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>Openwrt</tag>
+        <tag>ZBT wg3526</tag>
+        <tag>科学联网</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>为 Hexo 主题 indigo 添加 gitment 支持</title>
+    <url>/2017/05/04/gitmentHexoTheme/</url>
+    <content><![CDATA[<h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>却说 hexo 评论系统有 disqus、多说之类。近来多说倒闭，更换新评论系统成为要务。gitment 是新近出现的利用 github issue 系统作评论的评论系统。具有使用方便、免费等优点。因此打算采用此系统。</p>
+<h2 id="问题"><a href="#问题" class="headerlink" title="问题"></a>问题</h2><p>然而我现在所用主题 <a href="https://github.com/yscoder/hexo-theme-indigo" target="_blank" rel="noopener">indigo</a> 并不支援 gitment。向 <a href="https://github.com/yscoder/hexo-theme-indigo/issues/185" target="_blank" rel="noopener">issue</a> 反馈后并没有反应。因此只能自力更生。</p>
+<h2 id="插件系统"><a href="#插件系统" class="headerlink" title="插件系统"></a>插件系统</h2><p>观察主题文件结构</p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><span class="line">├── _config.yml</span><br><span class="line">├── layout</span><br><span class="line">│   ├── _partial</span><br><span class="line">│   │   ├── ......</span><br><span class="line">│   │   ├── plugins</span><br><span class="line">│   │   ├── post</span><br><span class="line">│   │   ├── ......</span><br></pre></td></tr></table></figure>
+
+<p>发现插件是存储在 plugins 文件夹下的 ejs 模版，打开 disqus.ejs 观察</p>
+<figure class="highlight html"><table><tr><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">%</span> <span class="attr">if</span> (<span class="attr">theme.disqus_shortname</span>)&#123; %&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">section</span> <span class="attr">class</span>=<span class="string">"comments"</span> <span class="attr">id</span>=<span class="string">"comments"</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">div</span> <span class="attr">id</span>=<span class="string">"disqus_thread"</span>&gt;</span><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">script</span>&gt;</span></span><br><span class="line"><span class="actionscript">    <span class="keyword">var</span> disqus_shortname = <span class="string">'&lt;%- theme.disqus_shortname %&gt;'</span>;</span></span><br><span class="line"><span class="actionscript">    lazyScripts.push(<span class="string">'//'</span> + disqus_shortname + <span class="string">'.disqus.com/embed.js'</span>)</span></span><br><span class="line">    <span class="tag">&lt;/<span class="name">script</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">noscript</span>&gt;</span>Please enable JavaScript to view the <span class="tag">&lt;<span class="name">a</span> <span class="attr">href</span>=<span class="string">"https://disqus.com/?ref_noscript"</span>&gt;</span>comments powered by Disqus.<span class="tag">&lt;/<span class="name">a</span>&gt;</span><span class="tag">&lt;/<span class="name">noscript</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">section</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">%</span> &#125; %&gt;</span></span><br></pre></td></tr></table></figure>
+
+<p>theme.disqus_shortname 为配置文件中 disqus 的调用名称，又做真值判别又做变量。gitment 参数众多就不这样设置。</p>
+<p>主题定义了 comments 块放置评论系统，这个写在 indigo/layout/_partial/post/comment.ejs。内容如下：</p>
+<figure class="highlight html"><table><tr><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">%</span> <span class="attr">if</span>(<span class="attr">post.comments</span>)&#123; %&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">%-</span> <span class="attr">partial</span>('<span class="attr">..</span>/<span class="attr">plugins</span>/<span class="attr">duoshuo</span>', &#123;</span></span><br><span class="line"><span class="tag">    <span class="attr">key:</span> <span class="attr">post.slug</span>,</span></span><br><span class="line"><span class="tag">    <span class="attr">title:</span> <span class="attr">post.title</span>,</span></span><br><span class="line"><span class="tag">    <span class="attr">url:</span> <span class="attr">url</span></span></span><br><span class="line"><span class="tag">  &#125;) %&gt;</span></span><br><span class="line"></span><br><span class="line"><span class="tag">&lt;<span class="name">%-</span> <span class="attr">partial</span>('<span class="attr">..</span>/<span class="attr">plugins</span>/<span class="attr">disqus</span>') %&gt;</span></span><br><span class="line"></span><br><span class="line"><span class="tag">&lt;<span class="name">%&#125;</span> %&gt;</span></span><br></pre></td></tr></table></figure>
+
+<p>用 partial 加载，因此添加 &lt;%- partial(‘../plugins/gitment’) %&gt; 用来加载 gitment 插件</p>
+<p>gitment 文档介绍加载方法如下：</p>
+<blockquote>
+<figure class="highlight html"><table><tr><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">div</span> <span class="attr">id</span>=<span class="string">"container"</span>&gt;</span><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">link</span> <span class="attr">rel</span>=<span class="string">"stylesheet"</span> <span class="attr">href</span>=<span class="string">"https://imsun.github.io/gitment/style/default.css"</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">script</span> <span class="attr">src</span>=<span class="string">"https://imsun.github.io/gitment/dist/gitment.browser.js"</span>&gt;</span><span class="tag">&lt;/<span class="name">script</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">script</span>&gt;</span></span><br><span class="line"><span class="actionscript"><span class="keyword">var</span> gitment = <span class="keyword">new</span> Gitment(&#123;</span></span><br><span class="line"><span class="actionscript"> id: <span class="string">'页面 ID'</span>, <span class="comment">// 可选。默认为 location.href</span></span></span><br><span class="line"><span class="actionscript"> owner: <span class="string">'你的 GitHub ID'</span>,</span></span><br><span class="line"><span class="actionscript"> repo: <span class="string">'存储评论的 repo'</span>,</span></span><br><span class="line"> oauth: &#123;</span><br><span class="line"><span class="actionscript">   client_id: <span class="string">'你的 client ID'</span>,</span></span><br><span class="line"><span class="actionscript">   client_secret: <span class="string">'你的 client secret'</span>,</span></span><br><span class="line"> &#125;,</span><br><span class="line">&#125;)</span><br><span class="line"><span class="actionscript">gitment.render(<span class="string">'container'</span>)</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">script</span>&gt;</span> </span><br></pre></td></tr></table></figure>
+</blockquote>
+<p>gitment.ejs 里配合主题布局添加</p>
+<figure class="highlight html"><table><tr><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">%</span> <span class="attr">if</span> (<span class="attr">theme.gitment</span>)&#123; %&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">section</span> <span class="attr">class</span>=<span class="string">"comments"</span> <span class="attr">id</span>=<span class="string">"comments"</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">div</span> <span class="attr">id</span>=<span class="string">"gitment_thread"</span>&gt;</span><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">link</span> <span class="attr">rel</span>=<span class="string">"stylesheet"</span> <span class="attr">href</span>=<span class="string">"https://imsun.github.io/gitment/style/default.css"</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">script</span> <span class="attr">src</span>=<span class="string">"https://imsun.github.io/gitment/dist/gitment.browser.js"</span>&gt;</span><span class="tag">&lt;/<span class="name">script</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">script</span>&gt;</span></span><br><span class="line"><span class="actionscript">        <span class="keyword">var</span> gitment = <span class="keyword">new</span> Gitment(&#123;</span></span><br><span class="line"><span class="actionscript">            owner: <span class="string">'&lt;%- theme.gitment.owner %&gt;'</span>,</span></span><br><span class="line"><span class="actionscript">            repo: <span class="string">'&lt;%- theme.gitment.repo %&gt;'</span>,</span></span><br><span class="line">            oauth: &#123;</span><br><span class="line"><span class="actionscript">                client_id: <span class="string">'&lt;%- theme.gitment.client_id %&gt;'</span>,</span></span><br><span class="line"><span class="actionscript">                client_secret: <span class="string">'&lt;%- theme.gitment.client_secret %&gt;'</span>,</span></span><br><span class="line">            &#125;,</span><br><span class="line">        &#125;)</span><br><span class="line"><span class="actionscript">        gitment.render(<span class="string">'comments'</span>)</span></span><br><span class="line">    <span class="tag">&lt;/<span class="name">script</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">section</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">%</span> &#125; %&gt;</span></span><br></pre></td></tr></table></figure>
+
+<p>最后注意 gitment 传回的是 comments 块。</p>
+<p>在配置文件里还要加上相关参数</p>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 开启</span></span><br><span class="line"><span class="attr">gitment:</span></span><br><span class="line"><span class="attr">  owner:</span></span><br><span class="line"><span class="attr">  repo:</span></span><br><span class="line"><span class="attr">  client_id:</span></span><br><span class="line"><span class="attr">  client_secret:</span></span><br></pre></td></tr></table></figure>
+
+<h2 id="测试"><a href="#测试" class="headerlink" title="测试"></a>测试</h2><p>经测试，显示完美</p>
+<hr>
+<p><img src="http://i.imgur.com/5K9uBn8.png" alt="gitment显示测试"></p>
+<hr>
+<h2 id="收尾"><a href="#收尾" class="headerlink" title="收尾"></a>收尾</h2><p>增添功能当然要惠及大家，因此向作者提出 pull request，希望能合并。第一次向开源界贡献一番，值得庆祝 </p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>开源</tag>
+        <tag>Hexo</tag>
+        <tag>gitment</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>巧用 Python 输出 DNSMasq 格式规则</title>
+    <url>/2017/03/11/pythonFormatPrint/</url>
+    <content><![CDATA[<h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>却说在我朝特色网络环境下访问仁厂eShop十分缓慢，因此用使用 DNSMasq 来加速访问办法。DNSMasq规则有一定格式，写作</p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><span class="line">address&#x3D;&#x2F;xxx.com&#x2F;127.0.0.1</span><br></pre></td></tr></table></figure>
+
+<p>这样的格式，仁厂所用网址众多，ping得IP后手写显然不便。因此利用python格式输出方便快捷。</p>
+<h2 id="Python-代码"><a href="#Python-代码" class="headerlink" title="Python 代码"></a>Python 代码</h2><figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">import</span> numpy <span class="keyword">as</span> np</span><br><span class="line"></span><br><span class="line"><span class="comment"># xxx.txt 获得ip与网址路径</span></span><br><span class="line">dns = np.loadtxt(<span class="string">"xxx.txt"</span>,dtype=bytes).astype(str)</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> n <span class="keyword">in</span> range(dns.shape[<span class="number">0</span>]):</span><br><span class="line">    <span class="comment"># 这里 txt 中先ip后网址</span></span><br><span class="line">    dp = <span class="string">'address=/'</span>+dns[n][<span class="number">1</span>]+<span class="string">'/'</span>+dns[n][<span class="number">0</span>]</span><br><span class="line">    print(dp)</span><br></pre></td></tr></table></figure>
+
+<h3 id="解释"><a href="#解释" class="headerlink" title="解释"></a>解释</h3><p>1.numpy 中数组读取txt中文本以bytes读取，这里用astype函数转型为str</p>
+<p>2.这里 txt 中先ip后网址于是生成2维数组。shape函数输出为行数、列数，因此range为shape[0]。</p>
+<h2 id="结语"><a href="#结语" class="headerlink" title="结语"></a>结语</h2><p>Python 库丰富，功能方便，要是C恐怕还在处理文件流😏。我看人人都可学点python，极大提升生产力。</p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>Python</tag>
+        <tag>Web</tag>
+        <tag>DNSMasq</tag>
+        <tag>任天堂</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Flask 开发中的 Flask-PyMongo 小坑</title>
+    <url>/2017/02/24/cafeteriaflask/</url>
+    <content><![CDATA[<h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>寨大呆久了食堂吃个遍，每日吃饭成问题。早就想写个食堂选择器，先前看node.js火试着写一下，但我毕竟不是web🐒，写js这是最痛苦的。近来学用Python后渐渐熟悉语法，便寻思用python重写。</p>
+<p>Flask是个python微框架，拿来写我这种小应用是十分合适。</p>
+<h2 id="垃圾教程毁我时间"><a href="#垃圾教程毁我时间" class="headerlink" title="垃圾教程毁我时间"></a>垃圾教程毁我时间</h2><p>本篇不是flask教程，如何安装等等在此不表。说说我遇到的坑，</p>
+<p>储存食堂信息显然要用数据库，为保方便，使用MongoDB。因此使用Flask-PyMongo插件。其中<a href="https://flask-pymongo.readthedocs.io/en/latest/" target="_blank" rel="noopener">文档</a>有一段：</p>
+<blockquote>
+<p>PyMongo connects to the MongoDB server running on port 27017 on localhost, and assumes a default database name of app.name (i.e. whatever name you pass to Flask). This database is exposed as the db attribute.</p>
+</blockquote>
+<blockquote>
+<p>You can use db directly in views:</p>
+</blockquote>
+<blockquote>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="meta">@app.route('/')</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">home_page</span><span class="params">()</span>:</span></span><br><span class="line">   online_users = mongo.db.users.find(&#123;<span class="string">'online'</span>: <span class="literal">True</span>&#125;)</span><br><span class="line">   <span class="keyword">return</span> render_template(<span class="string">'index.html'</span>,</span><br><span class="line">       online_users=online_users) </span><br></pre></td></tr></table></figure>
+</blockquote>
+<p>其中users是mongoDB中数据库的Collection，但在这里看不出是object还是method🌚。直接拿来写总是不成，害我怀疑是插件问题还是数据库问题。</p>
+<p>python这种动态语言不标出类型还是有缺陷。</p>
+<p>项目源码移步<a href="https://github.com/ckyOL/CateteriaSelector-flask" target="_blank" rel="noopener">github</a></p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>Python</tag>
+        <tag>Web</tag>
+        <tag>Flask</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>迁移到 Hexo</title>
+    <url>/2016/12/22/transToHexo/</url>
+    <content><![CDATA[<h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>自从4月租用DO主机以来，已经过了8个月。免费余额所剩不多，需早日作迁移打算。另Wordpress实在臃肿，希望用轻量博客框架</p>
+<h2 id="Hexo"><a href="#Hexo" class="headerlink" title="Hexo"></a>Hexo</h2><p>hexo 这个貌似挺流行，便装来尝试一番，node做的blog，本地建站后 deploy 形式倒是新颖。Markdown 写作方式方便舒适。</p>
+<p>因此将wordpress文章迁移一番，配置一番（其中各种坑）</p>
+<h2 id="结语"><a href="#结语" class="headerlink" title="结语"></a>结语</h2><p>现时也是年尾，这篇就作新年文章了。做了1学期科研训练，我看日后要走这条路了。新一年中继续磨练科研水平，苦学以早日肉翻😄</p>
+]]></content>
+      <categories>
+        <category>日志</category>
+      </categories>
+      <tags>
+        <tag>Hexo</tag>
+        <tag>迁移</tag>
+        <tag>github</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>结合 Block 算法的 Strassen 矩阵乘法</title>
+    <url>/2016/12/19/blockstrassen/</url>
+    <content><![CDATA[<h2 id="1-引言"><a href="#1-引言" class="headerlink" title="1.引言"></a>1.引言</h2><p>对于矩阵乘法，常规算法是进行三重循环求解，复杂度显然 O($n^{3}$)。对此可使用 strassen 算法进行优化，复杂度降低到 O($n^{2.81}$)。实际测试中时间虽然比传统方法快，但仍然耗时。本文介绍一种结合 Block 算法的 strassen 算法优化，测试将2048规模矩阵乘法用时降低几秒。</p>
+<h2 id="2-Strassen-算法"><a href="#2-Strassen-算法" class="headerlink" title="2.Strassen 算法"></a>2.Strassen 算法</h2>
+
+$$A=
+\begin{bmatrix}
+A_{1,1} & A_{1,2} \\
+A_{2,1} & A_{2,2}
+\end{bmatrix} $$
+
+
+
+
+
+<p>同理B，C。</p>
+<p>于是</p>
+
+
+$$ C_{1,1}=A_{1,1}B_{1,1}+A_{1,2}B_{2,1} $$
+    
+$$ C_{1,2}=A_{1,1}B_{1,2}+A_{1,2}B_{2,2} $$
+
+$$ C_{2,1}=A_{2,1}B_{1,1}+A_{2,2}B_{2,1} $$
+
+$$ C_{2,2}=A_{2,1}B_{1,2}+A_{2,2}B_{2,2} $$
+
+
+
+<p>引入新矩阵</p>
+
+
+$$ 
+{M}_{1}= ({A}_{1,1} + {A}_{2,2})({B}_{1,1} + {B}_{2,2})
+$$
+
+$$
+{M}_{2} = ({A}_{2,1} + {A}_{2,2}) {B}_{1,1}
+$$
+
+$$
+{M}_{3} = {A}_{1,1} ({B}_{1,2} - {B}_{2,2})
+$$
+
+$$
+{M}_{4} = {A}_{2,2} ({B}_{2,1} - {B}_{1,1})
+$$
+
+$$
+{M}_{5} = ({A}_{1,1} + {A}_{1,2}) {B}_{2,2}
+$$
+
+$$
+{M}_{6} = ({A}_{2,1} - {A}_{1,1}) ({B}_{1,1} + {B}_{1,2})
+$$
+
+$$
+{M}_{7} = ({A}_{1,2} - {A}_{2,2}) ({B}_{2,1} + {B}_{2,2})
+$$
+
+
+
+<p>可得：</p>
+
+
+$$
+{C}_{1,1} = {M}_{1} + {M}_{4} - {M}_{5} + {M}_{7}
+$$
+
+$$
+{C}_{1,2} = {M}_{3} + {M}_{5}
+$$
+
+$$
+{C}_{2,1} = {M}_{2} + {M}_{4}
+$$
+
+$$ 
+{C}_{2,2} = {M}_{1} - {M}_{2} + {M}_{3} + {M}_{6}
+$$ 
+
+
+
+<h2 id="3-Block-算法"><a href="#3-Block-算法" class="headerlink" title="3.Block 算法"></a>3.Block 算法</h2><p>比较两段代码：</p>
+<p>代码1</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line">s=<span class="number">0</span>;</span><br><span class="line"><span class="keyword">for</span>(i=<span class="number">0</span>;i&lt;n;i++)&#123;</span><br><span class="line">    s+=a[i];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>代码2</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line">s1=<span class="number">0</span>;s2=<span class="number">0</span>;</span><br><span class="line"><span class="keyword">for</span>(i=<span class="number">0</span>;i&lt;n<span class="number">-2</span>;i+=<span class="number">2</span>)&#123;</span><br><span class="line">    s1+=a[i];</span><br><span class="line">    s2+=a[i+<span class="number">1</span>];</span><br><span class="line">&#125;</span><br><span class="line">s=s1+s2;</span><br></pre></td></tr></table></figure>
+
+<p>由代码2可见在一次循环中做了两次加和，显然比代码1要快速。</p>
+<p>因此 Block 算法即将循环展开，一次进行复数运算达到提高处理速度的目的。</p>
+<h2 id="4-运用于矩阵乘法"><a href="#4-运用于矩阵乘法" class="headerlink" title="4.运用于矩阵乘法"></a>4.运用于矩阵乘法</h2><figure class="highlight c++"><table><tr><td class="code"><pre><span class="line">matrixMultBlock(martix A, martix B,martix C,<span class="keyword">int</span> n) </span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">/* martix is n x n */</span></span><br><span class="line">    M=<span class="number">16</span>;</span><br><span class="line">    <span class="keyword">for</span> (ii = <span class="number">0</span>; ii &lt; n; ii+=M) &#123;</span><br><span class="line">        <span class="keyword">for</span> (jj = <span class="number">0</span>; jj &lt; n; jj+=M) &#123;</span><br><span class="line">            <span class="keyword">for</span> (kk = <span class="number">0</span>; kk &lt; n; kk+=M) &#123;</span><br><span class="line">                <span class="keyword">for</span>(i=ii; i&lt;ii+M; i++) &#123;</span><br><span class="line">                    <span class="keyword">for</span>(k=kk; k&lt;kk+M; k++) &#123;</span><br><span class="line">                        <span class="keyword">for</span>(j=jj; j&lt;jj+M; j++) &#123;</span><br><span class="line">                            C[i][j] += A[i][k]*B[k][j];</span><br><span class="line">                        &#125;</span><br><span class="line">                    &#125;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>由文献得分块取16时效果较好[1]</p>
+<h2 id="5-测试"><a href="#5-测试" class="headerlink" title="5.测试"></a>5.测试</h2><p>分别用两种算法在1024、2048规模下测试，重复3次。</p>
+<p>测试环境:Intel Core i5 4258U (2.4GHz),4G RAM</p>
+<p>表1 算法测试用时（ms）</p>
+<table>
+<thead>
+<tr>
+<th>规模</th>
+<th>次数</th>
+<th>strassen</th>
+<th>strassen with block</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1024</td>
+<td>1</td>
+<td>11558</td>
+<td>7814</td>
+</tr>
+<tr>
+<td></td>
+<td>2</td>
+<td>9929</td>
+<td>7262</td>
+</tr>
+<tr>
+<td></td>
+<td>3</td>
+<td>8393</td>
+<td>7363</td>
+</tr>
+<tr>
+<td>2048</td>
+<td>1</td>
+<td>52950</td>
+<td>51274</td>
+</tr>
+<tr>
+<td></td>
+<td>2</td>
+<td>54158</td>
+<td>51989</td>
+</tr>
+<tr>
+<td></td>
+<td>3</td>
+<td>57490</td>
+<td>56193</td>
+</tr>
+</tbody></table>
+<p>$\overline{T}_{s,1024}=$9960ms</p>
+<p>$\overline{T}_{swb,1024}=$7480ms</p>
+<p>$\Delta T_{1024}$=2480ms=2.48s</p>
+<p>$\overline{T}_{s,2048}=$54860ms</p>
+<p>$\overline{T}_{swb,2048}=$53152ms</p>
+<p>$\Delta T_{2048}$=1708ms=1.708s</p>
+<h2 id="6-结论"><a href="#6-结论" class="headerlink" title="6.结论"></a>6.结论</h2><p>经过测试，结合 Block 算法的 Strassen 矩阵乘法较普通的最大减少2.48秒，时间效率有所提高，但更高效的优化还需探索。</p>
+<h2 id="参考文献"><a href="#参考文献" class="headerlink" title="参考文献"></a>参考文献</h2><p>[1] Kouya T. Accelerated multiple precision matrix multiplication using Strassen’s algorithm and Winograd’s variant[J]. JSIAM Letters, 2014, 6(0): 81-84.</p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>block</tag>
+        <tag>strassen</tag>
+        <tag>算法</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>记 Parallels Desktop 装 Arch linux 小坑</title>
+    <url>/2016/11/06/ParallelsArch/</url>
+    <content><![CDATA[<p>Arch linux 这个发行版的自由度众所周知，自然在安装过程中就难倒小白。虽说有官方wiki，却是晦涩难懂。进来逛喵窝的bbs发现有人写了篇<a href="https://blog.yoitsu.moe/arch-linux/installing_arch_linux_for_complete_newbies.html" target="_blank" rel="noopener">教程</a>便打算一装，提升<del datetime="2016-11-06T12:58:15+00:00">逼格</del>linux水平。</p>
+<p>照着安装教程一路顺利，到 grub 配置处就出了问题，一开始没发现就傻傻reboot结果启动不起来，一脸懵逼。<br>后来再装注意了 error 提示：</p>
+<blockquote>
+<p>/sbin/grub-setup: warn: Attempting to install GRUB to a partitionless disk or to a partition. This is a BAD idea.<br>/sbin/grub-setup: warn: Embedding is not possible. GRUB can only be installed in this setup by using blocklists.<br>However, blocklists are UNRELIABLE and their use is discouraged.</p>
+</blockquote>
+<p>以之搜索得<a href="https://wiki.archlinux.org/index.php/GRUB_(%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87)#.E4.B8.BB.E5.BC.95.E5.AF.BC.E8.AE.B0.E5.BD.95.28MBR.29.E7.89.B9.E6.AE.8A.E6.93.8D.E4.BD.9C" target="_blank" rel="noopener">官方wiki</a>的解释，说是 GRUB 不推荐将其安装到分区启动扇区或者无分区磁盘上。这 Parallels desktop 的 BIOS 引导如此奇怪？于是按强制法强行装上得以启动。</p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>archlinux</tag>
+        <tag>坑</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>水团演义 第一回「蜜柑园豪杰三结义 斩强敌英雄立首功」</title>
+    <url>/2016/05/08/aqourssanguo/</url>
+    <content><![CDATA[<p>话说偶像大事，合久必散，散久必合。昔缪斯力辍八方诸侯，败二赖子，天下一统。后解散而群雄并起，四方割据。</p>
+<blockquote>
+<p>……</p>
+</blockquote>
+<p>千歌曰:「吾观山后有一柑园，花开正盛；当于园中祭告天地，我三人结为姐妹，协力同心，然后可图大事。」曜、露比齐声应曰:「如此甚好。」于柑园中，备下乌牛白马祭礼等项，三人焚香再拜而说誓曰:「念千歌﹑曜﹑露比，虽然异姓，既结为姐妹，则同心协力，救困扶危；上报松月，下安黎庶；不求同年同月同日生，只愿同年同月同日死。皇天后土，实鉴此心。背义忘恩，天人共戮!」誓毕，拜曜为姐，千歌次之，露比为妹。</p>
+]]></content>
+      <categories>
+        <category>ACG</category>
+      </categories>
+      <tags>
+        <tag>LoveLive</tag>
+        <tag>Aqours</tag>
+        <tag>CYaRon</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>MC 打尻学</title>
+    <url>/2016/05/01/MCcall/</url>
+    <content><![CDATA[<h1 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h1><p>现今大偶像时代应援技术推陈出新，由单色之化学棒升级为可变色电棒，应援效果大增。为助众 LLer 在 MC 科学打 call，做尻立德，故创 MC 打尻学</p>
+<h1 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h1><p>MC 中棒状物有颜色可对应应援色</p>
+<h1 id="μ’s-应援"><a href="#μ’s-应援" class="headerlink" title="μ’s 应援"></a>μ’s 应援</h1><h2 id="果"><a href="#果" class="headerlink" title="果"></a>果</h2><p><img src="http://i.imgur.com/lroJzlE.png" alt="honoka"><br>烈焰棒做橙色极佳</p>
+<h2 id="鸟"><a href="#鸟" class="headerlink" title="鸟"></a>鸟</h2><p><img src="http://i.imgur.com/yTHE9sL.png" alt="kotori"><br>骨棒白色</p>
+<h2 id="凛"><a href="#凛" class="headerlink" title="凛"></a>凛</h2><p><img src="http://i.imgur.com/l3JilF0.png" alt="rin"><br>金剑自是 Yellow だよ</p>
+<h2 id="绘"><a href="#绘" class="headerlink" title="绘"></a>绘</h2><p><img src="http://i.imgur.com/BN2Z6is.png" alt="eli"><br>钻石剑冰蓝色</p>
+<h2 id="希"><a href="#希" class="headerlink" title="希"></a>希</h2><p><img src="http://i.imgur.com/H9OedQK.png" alt="mozomi"><br>附魔铁剑显紫色</p>
+<h2 id="其他"><a href="#其他" class="headerlink" title="其他"></a>其他</h2><p>对于花、海、妮、姬尚在思索中，其应援色棒状物未有，或许可考虑甘蔗、青金石、粉郁金香、玫瑰？若有好的想法可跟帖讨论</p>
+<h2 id="One-More-Thing"><a href="#One-More-Thing" class="headerlink" title="One More Thing"></a>One More Thing</h2><p><img src="http://i.imgur.com/TSagznz.png" alt="snowhala"><br>Snow halation 变色有砸 UO 之说，欲表现其极亮，烈焰棒有不足，此时可用火把。火把有照明范围（动态光源）颜色亦显橙色，便切合主题</p>
+]]></content>
+      <categories>
+        <category>ACG</category>
+      </categories>
+      <tags>
+        <tag>LoveLive</tag>
+        <tag>打 Call</tag>
+        <tag>拉学</tag>
+        <tag>尻学</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>大新闻系统</title>
+    <url>/2016/04/25/bignews/</url>
+    <content><![CDATA[<h3 id="php"><a href="#php" class="headerlink" title="php"></a>php</h3><p>上回说到数据库课作业——用php制网页操作数据库。观察实验模版，张滇钦点 amp ，于是就来瞧瞧<del>这世界上最好的语言</del>前端语言。作为从没写过前端的🐒，感觉这前端语言迥异：动态变量、可输出 html 语句。确实怪怪。当然作为 android 🐒，我用 SQL 语句就行了。</p>
+<h3 id="html"><a href="#html" class="headerlink" title="html"></a>html</h3><p>为写页面了解了下现代前端，真是方便无比。现成的框架直接有各种模块，修改属性直接加，按钮不需监听器、文本框不需值传递。看着就心里不安。为<del>偷懒</del>简便优雅，选用了 materialize 这一框架，速成一个符合 Material Design 的网页。遥想10年前做此效果不知多麻烦。<span style="color: #ffffff;">怪不得前端不如后端钱</span></p>
+<h3 id="大新闻系统"><a href="#大新闻系统" class="headerlink" title="大新闻系统"></a><span style="color: #000000;">大新闻系统</span></h3><p>实验指导样例给了个新闻系统，这新闻系统🐸意昂然。于是<del>借鉴</del>学用样例制 Frog News 系统</p>
+<p><img src="https://moepic.org/images/2016/04/25/f2c7b0d8dbad7b7bec4157f2a23919b9.png" alt=""></p>
+<p><img src="https://moepic.org/images/2016/04/25/7a31fe20a5462183c2cc5ea3e7b5bcb6.png" alt=""></p>
+<p><img src="https://moepic.org/images/2016/04/25/3997b618ad4591a4d4d4ddf7732b5869.png" alt=""></p>
+<p>大新闻系统有搞个大新闻（Frog News Hong Kong Reporter）与读新闻（Frog News Elder Reader）两部分，2.0版本增加编辑删除功能，更快搞个大新闻🐸</p>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>php</tag>
+        <tag>蛤</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Restart</title>
+    <url>/2016/04/25/restart/</url>
+    <content><![CDATA[<h3 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h3><p>却说自与 @liukangxu 合租期结束后 blog 停摆一年有余。近日恰逢数据库课作业需用 AMP （Apache、MySQL、php）制数据库操作之页。由于<del>洁癖</del>不想搞乱 Mac ，便用 Github 学生优惠开台 DO VPS，顺便架设这个 Blog。</p>
+<h3 id="Moe、Moe、Moe"><a href="#Moe、Moe、Moe" class="headerlink" title="Moe、Moe、Moe"></a>Moe、Moe、Moe</h3><p>近来看到不少 moe 域名，moe 域名却有萌意，namecheap 亦较之它家廉，借机入此域名紧跟潮流。便能更加将 ACG 同码农结合，<del>便能优雅科学传教</del>。其留后续文章叙述。</p>
+]]></content>
+      <categories>
+        <category>日志</category>
+      </categories>
+  </entry>
+  <entry>
+    <title>友链列表</title>
+    <url>/2016/04/24/friendLink/</url>
+    <content><![CDATA[<h2 id="友链"><a href="#友链" class="headerlink" title="友链"></a>友链</h2><p>为增进 blog 名气，传播优秀文章。欢迎互设友链。想申请？发email来吧。</p>
+<h2 id="C"><a href="#C" class="headerlink" title="C"></a>C</h2><p>Cym’s blog <a href="https://gobomb.github.io/" target="_blank" rel="noopener">https://gobomb.github.io/</a></p>
+]]></content>
+      <categories>
+        <category>日志</category>
+      </categories>
+      <tags>
+        <tag>友链</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>关于</title>
+    <url>/2016/04/24/about/</url>
+    <content><![CDATA[<h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>某小厂社畜，页面仔（划去）。</p>
+<h1 id="联络"><a href="#联络" class="headerlink" title="联络"></a>联络</h1><p>Twitter：<a href="https://twitter.com/ckyOL" target="_blank" rel="noopener">@ckyOL</a></p>
+]]></content>
+      <categories>
+        <category>日志</category>
+      </categories>
+      <tags>
+        <tag>关于</tag>
+      </tags>
+  </entry>
+</search>

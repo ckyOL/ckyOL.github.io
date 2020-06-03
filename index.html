@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+   
+  <meta name="keywords" content="技术 宅圈" />
+   
+  <meta name="description" content="技术、宅圈" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>
+     ckyOL&#39;s b10g
+  </title>
+  <meta name="generator" content="hexo-theme-yilia-plus">
+  
+  <link rel="shortcut icon" href="/images/my.ico" />
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+<script src="/js/pace.min.js"></script>
+
+
+  
+
+<script type="text/javascript">
+(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+})(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+ga('create', 'UA-10375098-9', 'auto');
+ga('send', 'pageview');
+
+</script>
+
+
+
+  
+
+<link rel="alternate" href="/atom.xml" title="ckyOL's b10g" type="application/atom+xml">
+</head>
+
+</html>
+
+<body>
+  <div id="app">
+    <main class="content">
+      
+<section class="cover">
+    
+  <div class="cover-frame">
+    <div class="bg-box">
+      <img src="/images/cover1.jpg" alt="image frame" />
+    </div>
+    <div class="cover-inner text-center text-white">
+      <h1><a href="/">ckyOL&#39;s b10g</a></h1>
+      <div id="subtitle-box">
+        
+        <span id="subtitle"></span>
+        
+      </div>
+      <div>
+        
+      </div>
+    </div>
+  </div>
+  <div class="cover-learn-more">
+    <a href="javascript:void(0)" class="anchor"><i class="ri-arrow-down-line"></i></a>
+  </div>
+</section>
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/typed.js@2.0.11/lib/typed.min.js"></script>
+
+<div id="main">
+  <section class="outer">
+  <article class="articles">
+    
+    
+    
+    
+    <article id="post-mattermostHelmPitfalls" class="article article-type-post" itemscope
+  itemprop="blogPost" data-scroll-reveal>
+
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h2 itemprop="name">
+  <a class="article-title" href="/2020/02/29/mattermostHelmPitfalls/"
+    >helm 架设 mattermost 踩坑</a
+  >
+</h2>
+  
+
+    </header>
+    
+
+    
+    <div class="article-meta">
+      <a href="/2020/02/29/mattermostHelmPitfalls/" class="article-date">
+  <time datetime="2020-02-29T12:15:38.000Z" itemprop="datePublished">2020-02-29</time>
+</a>
+      
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a>
+  </div>
+
+      
+      
+      
+    </div>
+    
+
+    
+
+    <div class="article-entry" itemprop="articleBody">
+      
+
+
+      
+
+      
+      <h2 id="工作"><a href="#工作" class="headerlink" title="工作"></a>工作</h2><p>却说社畜以来，做了兼职 <del>半吊子</del> 运维，用 k8s 部署些前后端。现在疫情影响，大家广泛应用远程办公工具，这公务交流显然要用专业工具。先前试用 slack，但毕竟在美帝受墙干扰，且免费版限制多，于是决定切换到自架 mattermost</p>
+<h2 id="matternost"><a href="#matternost" class="headerlink" title="matternost"></a>matternost</h2><blockquote>
+<p>Mattermost is a flexible, open source messaging platform<br>that enables secure team collaboration</p>
+</blockquote>
+<p>根据官网 <del>吹逼</del> 宣传，mattermost 是个开源的团队交流工具，看 UI 也和 slack 相近，用起来应该没有问题，甚至还用中文。注意到还有 <a href="https://github.com/mattermost/mattermost-helm" target="_blank" rel="noopener">helm 版</a> 。有了这个可部署方便多了</p>
+<h2 id="踩坑"><a href="#踩坑" class="headerlink" title="踩坑"></a>踩坑</h2><p>于是按照文档开始部署，坑就来了。</p>
+<h3 id="1-toyaml-error"><a href="#1-toyaml-error" class="headerlink" title="1. toyaml error"></a>1. toyaml error</h3><p>首先按所需变量一填，没想到报 toYaml error。原本以为 github 撞墙，下回来 tgz 在🐧☁️上开 darkhttpd ，没想到不是这个问题。没办法看下 yaml，原来是 resource 要填。原以为是 mattermost 的变量，没想到是 k8s 的 resource。以前创的时候用🐧☁️图形化没注意到😓</p>
+<h3 id="2-pod-has-unbound-PersistentVolumeClaims"><a href="#2-pod-has-unbound-PersistentVolumeClaims" class="headerlink" title="2. pod has unbound PersistentVolumeClaims"></a>2. pod has unbound PersistentVolumeClaims</h3><p>填上 resource 后接着来，这下没报错了。跑去集群一看，没启动起来，报<code>pod has unbound PersistentVolumeClaims</code>。以为硬盘不够，一看也还有空间。跑去集群——存储看看，没想到🐧☁️开存储最少开 10G，而 mattermost plugins 开 1G。是 1G 开不出来</p>
+<h3 id="3-read-only-file-system"><a href="#3-read-only-file-system" class="headerlink" title="3. read only file system"></a>3. read only file system</h3><p>再改配置开 10G，终于跑起来了。想着终于部署完了，进入后台开始配置，一点保存没想到又报错，看 log 发现报<code>open /mattermost/config/config.json: read-only file system</code>。配置是只读，这就没道理。逛下 github issue 发现  <a href="https://github.com/mattermost/mattermost-helm/issues/100" target="_blank" rel="noopener">mattermost/mattermost-helm#100</a> 有报这个问题，原来 matternost 把配置做 secret 而只读，总不能改个配置就重新部署一下。按照评论使用<code>extraInitContainers</code>把 config.json 拷去 data 空间，就可以读了。</p>
+<p><code>extraInitContainers</code> 使用了一个 alpine 来执行 cp 命令，这些配置</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">extraInitContainers:</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">copy-config</span></span><br><span class="line"><span class="attr">    image:</span> <span class="string">"alpine:latest"</span></span><br><span class="line"><span class="attr">    imagePullPolicy:</span> <span class="string">IfNotPresent</span></span><br><span class="line"><span class="attr">    volumeMounts:</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/config/config.json</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">config-json</span></span><br><span class="line"><span class="attr">      subPath:</span> <span class="string">config.json</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">mattermost-data</span></span><br><span class="line"><span class="attr">    command:</span> <span class="string">["/bin/ash",</span> <span class="string">"-c"</span><span class="string">,</span> <span class="string">"cp -f /mattermost/config/config.json /mattermost/data/config.json"</span><span class="string">]</span></span><br><span class="line"><span class="attr">extraEnvVars:</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">MM_CONFIG</span></span><br><span class="line"><span class="attr">    value:</span> <span class="string">"/mattermost/data/config.json"</span></span><br></pre></td></tr></table></figure>
+<p>按🐧☁️ key-value 写显然要命，就得想想用其他方法。这种写作 yaml 最方便，看 helm 可以用 -f 指定文件，按🐧☁️<a href="https://cloud.tencent.com/document/product/457/32731" target="_blank" rel="noopener">文档</a> 可以用 helm 客户端连进去，于是先开 kubectl 内网访问，后开 helm 连接进去。</p>
+<h3 id="4-permission-denied"><a href="#4-permission-denied" class="headerlink" title="4.permission denied"></a>4.permission denied</h3><p>这次用 yaml 创出来了再去配置又报 <code>open /mattermost/data/config.json: permission denied</code>，我寻思 mattermost 还能对自己 data 空间没权限，再逛逛 issue 发现  <a href="https://github.com/mattermost/mattermost-helm/issues/120" target="_blank" rel="noopener">mattermost/mattermost-helm#120</a> 使用 busybox 来赋予权限。按照这样先赋权后拷贝，应该就可以有权限更改了。</p>
+<h2 id="终章"><a href="#终章" class="headerlink" title="终章"></a>终章</h2><p>经过这些配置后发现在 5.13.2 版本下没问题，估计 tgz 只适配 5.13.2 版本。列出示例配置：</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">resources:</span></span><br><span class="line"><span class="attr">  limits:</span></span><br><span class="line"><span class="attr">    cpu:</span> <span class="number">500</span><span class="string">m</span></span><br><span class="line"><span class="attr">    memory:</span> <span class="number">1</span><span class="string">Gi</span></span><br><span class="line"><span class="attr">  requests:</span></span><br><span class="line"><span class="attr">    cpu:</span> <span class="number">100</span><span class="string">m</span></span><br><span class="line"><span class="attr">    memory:</span> <span class="number">512</span><span class="string">Mi</span></span><br><span class="line"></span><br><span class="line"><span class="attr">persistence:</span></span><br><span class="line"><span class="attr">  plugins:</span></span><br><span class="line"><span class="attr">    size:</span> <span class="number">10</span><span class="string">Gi</span></span><br><span class="line">  </span><br><span class="line"><span class="attr">extraEnvVars:</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">MM_CONFIG</span></span><br><span class="line"><span class="attr">    value:</span> <span class="string">"/mattermost/data/config.json"</span></span><br><span class="line"></span><br><span class="line"><span class="attr">extraInitContainers:</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">set-plugins-owner</span></span><br><span class="line"><span class="attr">    command:</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">sh</span></span><br><span class="line"><span class="bullet">    -</span> <span class="bullet">-c</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">chown</span> <span class="bullet">-R</span> <span class="number">2000</span><span class="string">:2000</span> <span class="string">/mattermost/plugins</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">chgrp</span> <span class="number">2000</span> <span class="string">/mattermost/plugins</span></span><br><span class="line"><span class="attr">    image:</span> <span class="attr">busybox:1.29.2</span></span><br><span class="line"><span class="attr">    imagePullPolicy:</span> <span class="string">IfNotPresent</span></span><br><span class="line"><span class="attr">    resources:</span> <span class="string">&#123;&#125;</span></span><br><span class="line"><span class="attr">    securityContext:</span></span><br><span class="line"><span class="attr">      privileged:</span> <span class="literal">true</span></span><br><span class="line"><span class="attr">    terminationMessagePath:</span> <span class="string">/dev/termination-log</span></span><br><span class="line"><span class="attr">    terminationMessagePolicy:</span> <span class="string">File</span></span><br><span class="line"><span class="attr">    volumeMounts:</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/plugins</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">mattermost-plugins</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">set-data-owner</span></span><br><span class="line"><span class="attr">    command:</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">sh</span></span><br><span class="line"><span class="bullet">    -</span> <span class="bullet">-c</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">chown</span> <span class="bullet">-R</span> <span class="number">2000</span><span class="string">:2000</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">chgrp</span> <span class="number">2000</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="attr">    image:</span> <span class="attr">busybox:1.29.2</span></span><br><span class="line"><span class="attr">    imagePullPolicy:</span> <span class="string">IfNotPresent</span></span><br><span class="line"><span class="attr">    resources:</span> <span class="string">&#123;&#125;</span></span><br><span class="line"><span class="attr">    securityContext:</span></span><br><span class="line"><span class="attr">      privileged:</span> <span class="literal">true</span></span><br><span class="line"><span class="attr">    terminationMessagePath:</span> <span class="string">/dev/termination-log</span></span><br><span class="line"><span class="attr">    terminationMessagePolicy:</span> <span class="string">File</span></span><br><span class="line"><span class="attr">    volumeMounts:</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">mattermost-data</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">copy-config</span></span><br><span class="line"><span class="attr">    image:</span> <span class="string">"alpine:latest"</span></span><br><span class="line"><span class="attr">    imagePullPolicy:</span> <span class="string">IfNotPresent</span></span><br><span class="line"><span class="attr">    volumeMounts:</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/config/config.json</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">config-json</span></span><br><span class="line"><span class="attr">      subPath:</span> <span class="string">config.json</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">mattermost-data</span></span><br><span class="line"><span class="attr">    command:</span> <span class="string">["/bin/ash",</span> <span class="string">"-c"</span><span class="string">,</span> <span class="string">"cp -f /mattermost/config/config.json /mattermost/data/config.json"</span><span class="string">]</span></span><br></pre></td></tr></table></figure>
+
+
+      
+      <!-- reward -->
+      
+    </div>
+      <!-- copyright -->
+      
+    <footer class="article-footer">
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/helm/" rel="tag">helm</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/k8s/" rel="tag">k8s</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/mattermost/" rel="tag">mattermost</a></li></ul>
+
+
+    </footer>
+
+  </div>
+
+  
+
+  
+
+  
+
+</article>
+    
+    <article id="post-2020newYearNewTheme" class="article article-type-post" itemscope
+  itemprop="blogPost" data-scroll-reveal>
+
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h2 itemprop="name">
+  <a class="article-title" href="/2020/02/10/2020newYearNewTheme/"
+    >新年新主题</a
+  >
+</h2>
+  
+
+    </header>
+    
+
+    
+    <div class="article-meta">
+      <a href="/2020/02/10/2020newYearNewTheme/" class="article-date">
+  <time datetime="2020-02-10T03:29:30.000Z" itemprop="datePublished">2020-02-10</time>
+</a>
+      
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a>
+  </div>
+
+      
+      
+      
+    </div>
+    
+
+    
+
+    <div class="article-entry" itemprop="articleBody">
+      
+
+
+      
+
+      
+      <h2 id="2020"><a href="#2020" class="headerlink" title="2020"></a>2020</h2><p>却说社畜以来，每日上班摧残没得精力写 blog，一不小心就到了 2020 年。2019 年只有一篇🌚，再不更给你们有关博🐦🐦之感。万万没想到 2020 年初疫情搞的假期越来越长，甚至出现远程上班。远程上班那可就放心 <del>划水</del> 休闲，于是有闲情更博。</p>
+<h2 id="换主题"><a href="#换主题" class="headerlink" title="换主题"></a>换主题</h2><p>本博先使用 indigo 主题已久，本来也是基本适用。前两日却有 gayhub 邮件轰炸，说什么 <code>GitHub API Deprecation notice</code>。于是便想更新主题，没想到主题年久失修，最后更新于去年 1 月。看来不能指望了，逛一圈发现新近出来的主题 <a href="https://www.v2ex.com/t/629144" target="_blank" rel="noopener">Ayer</a> 较为美观、功能齐全、更新迅速（昨天 PR gitalk 更新迅速 merged）。于是切换到 Ayer，本博更现代😆</p>
+
+      
+      <!-- reward -->
+      
+    </div>
+      <!-- copyright -->
+      
+    <footer class="article-footer">
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/2020/" rel="tag">2020</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/hexo/" rel="tag">hexo</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E4%B8%BB%E9%A2%98/" rel="tag">主题</a></li></ul>
+
+
+    </footer>
+
+  </div>
+
+  
+
+  
+
+  
+
+</article>
+    
+    <article id="post-beancountPitfalls" class="article article-type-post" itemscope
+  itemprop="blogPost" data-scroll-reveal>
+
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h2 itemprop="name">
+  <a class="article-title" href="/2019/04/18/beancountPitfalls/"
+    >beancount 踩坑记录</a
+  >
+</h2>
+  
+
+    </header>
+    
+
+    
+    <div class="article-meta">
+      <a href="/2019/04/18/beancountPitfalls/" class="article-date">
+  <time datetime="2019-04-18T09:57:27.000Z" itemprop="datePublished">2019-04-18</time>
+</a>
+      
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a>
+  </div>
+
+      
+      
+      
+    </div>
+    
+
+    
+
+    <div class="article-entry" itemprop="articleBody">
+      
+
+
+      
+
+      
+      <h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>却说社畜以来，不得不考虑衣食住行。加上入了卡圈，申来一堆卡，出账分散。若没有记账自然生活捉急。但考量市面各记账软件，要不限制在自己平台（不放心数据安全），要不功能有限（记录麻烦）。恰巧前几天在<a href="https://twitter.com/lilydjwg/status/1117033078541578241" target="_blank" rel="noopener">推上</a>看到有推荐 beancount，由此才发现复式记账的优雅，便装来记账一番。</p>
+<h2 id="基础知识"><a href="#基础知识" class="headerlink" title="基础知识"></a>基础知识</h2><p>欲记账自然要先了解记账，择录两篇作先行入门。</p>
+<p><a href="https://wzyboy.im/post/1063.html" target="_blank" rel="noopener">《Beancount —— 命令行复式簿记》</a> from wzyboy’s blog</p>
+<p><a href="https://yuchi.me/post/beancount-intro/" target="_blank" rel="noopener">《beancount 简易入门指南》</a> from Chi’s Journal</p>
+<h2 id="账单预处理"><a href="#账单预处理" class="headerlink" title="账单预处理"></a>账单预处理</h2><p>记账源头自然来自账单，但账单格式各异。需要做预处理。</p>
+<p>好比建行借记卡账单</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">China Construction Bank,,,,,,,,,,</span><br><span class="line">开户机构：,XX市,,,,,,,,,</span><br><span class="line">币　　种：,人民币,,,,,,,,,</span><br><span class="line">账　　号：,6217XXXXXXXXXXX,,,,,,,,,</span><br><span class="line">,,,,,,,,,,</span><br><span class="line">记账日          ,交易日期          ,交易时间                ,支出                ,收入                ,账户余额          ,币种          ,摘要            ,对方账号          ,对方户名          ,交易地点                </span><br><span class="line">20190416,20190416,07:43:12,1.00,0.00,&quot;XXXX&quot;,人民币,跨行其他渠道消费,XXXXXXXX,二维码快速收款码专用,二维码快速收款码专用</span><br></pre></td></tr></table></figure>
+
+<p>观察发现有许多无用信息，虽然 beancount importer 会去匹配 header，但遇到空单元格会报错。如 <code>账　　号：,6217XXXXXXXXXXX,,,,,,,,,</code> 一行，需自己填充空位或删去此行。当然各账单头差不多，删去就失去辨别性，还是留一行做辨识。</p>
+<h2 id="beancount-运行"><a href="#beancount-运行" class="headerlink" title="beancount 运行"></a>beancount 运行</h2><p>当装好 beancount 与 fava 后准备开心看图表。没想到报 Reason: image not found 错误。原以为是 pyenv 所装 3.6.5 太旧，于是安装 3.7.0。但并没有什么卯用，后来发现是 xcode command-line 的问题，于是更新完毕解决。</p>
+<h2 id="结语"><a href="#结语" class="headerlink" title="结语"></a>结语</h2><p>beancount 作为纯文本记账。数据自我掌控十分安全、前端丰富展现优雅、复式记账科学精细。实乃居家必备良品。</p>
+
+      
+      <!-- reward -->
+      
+    </div>
+      <!-- copyright -->
+      
+    <footer class="article-footer">
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/beancount/" rel="tag">beancount</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%9D%91/" rel="tag">坑</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E8%AE%B0%E8%B4%A6/" rel="tag">记账</a></li></ul>
+
+
+    </footer>
+
+  </div>
+
+  
+
+  
+
+  
+
+</article>
+    
+    <article id="post-hexoIndigoGitalk" class="article article-type-post" itemscope
+  itemprop="blogPost" data-scroll-reveal>
+
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h2 itemprop="name">
+  <a class="article-title" href="/2018/09/15/hexoIndigoGitalk/"
+    >为 Hexo 主题 indigo 添加 gitalk 插件</a
+  >
+</h2>
+  
+
+    </header>
+    
+
+    
+    <div class="article-meta">
+      <a href="/2018/09/15/hexoIndigoGitalk/" class="article-date">
+  <time datetime="2018-09-15T08:40:57.000Z" itemprop="datePublished">2018-09-15</time>
+</a>
+      
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a>
+  </div>
+
+      
+      
+      
+    </div>
+    
+
+    
+
+    <div class="article-entry" itemprop="articleBody">
+      
+
+
+      
+
+      
+      <h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>去年给现在用的主题添加了 gitment 评论插件后一直使用良好，但今天新 po 文章发现 gitment 停摆了🌚，表现为无法 initialize、登录出现 [object ProgressEvent] 错误。观察 gitment 也许久没更新，估计作者<del>跑路</del>没时间更，而 github 或许又有什么变动造成不能用。因此物色新评论系统。</p>
+<h2 id="Gitalk"><a href="#Gitalk" class="headerlink" title="Gitalk"></a>Gitalk</h2><p>这时观察到 <a href="https://github.com/gitalk/gitalk" target="_blank" rel="noopener">gitalk</a> 可以较好替代，有如下优点：</p>
+<ul>
+<li>作者更新勤</li>
+<li>工作正常</li>
+<li>界面优雅</li>
+<li>动画丰富</li>
+<li>自动建 issue</li>
+</ul>
+<p>等等</p>
+<h2 id="轻车熟路加插件"><a href="#轻车熟路加插件" class="headerlink" title="轻车熟路加插件"></a>轻车熟路加插件</h2><p>因为有了先前经验<a href="https://blog.ckyol.moe/2017/05/04/gitmentHexoTheme/">为 Hexo 主题 indigo 添加 gitment 支持</a>，直接加插件。类似 gitment 只需替换 style、script 链接，将 gitalk 关联 config.yml 即可</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">&lt;% <span class="keyword">if</span> (theme.gitalk)&#123; %&gt;</span><br><span class="line">&lt;section <span class="class"><span class="keyword">class</span></span>=<span class="string">"comments"</span> id=<span class="string">"comments"</span>&gt;</span><br><span class="line">    &lt;div id=<span class="string">"gitalk-container"</span>&gt;<span class="xml"><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span></span><br><span class="line">    &lt;link rel=<span class="string">"stylesheet"</span> href=<span class="string">"https://unpkg.com/gitalk/dist/gitalk.css"</span>&gt;</span><br><span class="line">    &lt;script src=<span class="string">"https://unpkg.com/gitalk/dist/gitalk.min.js"</span>&gt;<span class="xml"><span class="tag">&lt;/<span class="name">script</span>&gt;</span></span></span><br><span class="line">    &lt;script&gt;</span><br><span class="line">        <span class="keyword">var</span> gitalk = <span class="keyword">new</span> Gitalk(&#123;</span><br><span class="line">            clientID: <span class="string">'&lt;%- theme.gitalk.client_id %&gt;'</span>,</span><br><span class="line">            clientSecret: <span class="string">'&lt;%- theme.gitalk.client_secret %&gt;'</span>,</span><br><span class="line">            repo: <span class="string">'&lt;%- theme.gitalk.repo %&gt;'</span>,</span><br><span class="line">            owner: <span class="string">'&lt;%- theme.gitalk.owner %&gt;'</span>,</span><br><span class="line">            admin: <span class="string">'&lt;%- theme.gitalk.admin %&gt;'</span>,</span><br><span class="line">            id: <span class="string">'&lt;%= page.date %&gt;'</span>,</span><br><span class="line">            distractionFreeMode: <span class="literal">false</span></span><br><span class="line">            &#125;)</span><br><span class="line">            </span><br><span class="line">        gitalk.render(<span class="string">'gitalk-container'</span>)</span><br><span class="line">    &lt;<span class="regexp">/script&gt;</span></span><br><span class="line"><span class="regexp">&lt;/</span>section&gt;</span><br><span class="line">&lt;% &#125; %&gt;</span><br></pre></td></tr></table></figure>
+
+<p>默认 label 用 URL 难免超 50 字，为保标签不爆改用时间。若不喜欢可替换。</p>
+<p>然后在 comment.ejs 加载 gitalk 即可</p>
+<h2 id="测试"><a href="#测试" class="headerlink" title="测试"></a>测试</h2><p>添加完后 blog 成功加载 gitalk</p>
+<p><img src="https://i.imgur.com/L7RgDj4.png" alt="gitalk success"></p>
+<h2 id="结语"><a href="#结语" class="headerlink" title="结语"></a>结语</h2><p>等下提个 PR 去（不过先前的添加比特币打赏支援都没 merge🙄）</p>
+
+      
+      <!-- reward -->
+      
+    </div>
+      <!-- copyright -->
+      
+    <footer class="article-footer">
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/gitalk/" rel="tag">gitalk</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/hexo/" rel="tag">hexo</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%89%8D%E7%AB%AF/" rel="tag">前端</a></li></ul>
+
+
+    </footer>
+
+  </div>
+
+  
+
+  
+
+  
+
+</article>
+    
+    <article id="post-DTAresetPasswdWithVue" class="article article-type-post" itemscope
+  itemprop="blogPost" data-scroll-reveal>
+
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h2 itemprop="name">
+  <a class="article-title" href="/2018/09/15/DTAresetPasswdWithVue/"
+    >Vue 前端配合 Devise Token Auth 忘记密码重置操作</a
+  >
+</h2>
+  
+
+    </header>
+    
+
+    
+    <div class="article-meta">
+      <a href="/2018/09/15/DTAresetPasswdWithVue/" class="article-date">
+  <time datetime="2018-09-15T03:58:02.000Z" itemprop="datePublished">2018-09-15</time>
+</a>
+      
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a>
+  </div>
+
+      
+      
+      
+    </div>
+    
+
+    
+
+    <div class="article-entry" itemprop="articleBody">
+      
+
+
+      
+
+      
+      <h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>近来开发个活动报名站，后端使用 Ruby on Rails，前端使用 Vue。由于是SPA，传统的 cookie 法就不太适宜，使用流行的 JWT。因此选用 <a href="https://github.com/lynndylanhurley/devise_token_auth" target="_blank" rel="noopener">Devise Token Auth</a> gem 来处理用户模型与 token 发行、验证等工作。</p>
+<h2 id="密码重置流程"><a href="#密码重置流程" class="headerlink" title="密码重置流程"></a>密码重置流程</h2><p>其他模块使用正常且方便。而忘记密码重置涉及到邮件，reset link 发行等就显得麻烦。根据官方 wiki 记载 <a href="https://devise-token-auth.gitbook.io/devise-token-auth/faq#whats-the-reset-password-flow" target="_blank" rel="noopener">reset password flow</a></p>
+<blockquote>
+<ul>
+<li>在前端页面中填写邮箱地址输入框，有按钮可以发送重置邮件</li>
+<li><code>POST /auth/password</code> <code>JSON: {email, redirect_url}</code><br>这里 redirect_url 为前端页面，有填写密码框</li>
+<li>后端生成 <code>reset_password_token</code> 与链接填入邮件，形如 <code>http://localhost:3000/api/v1/auth/password/edit?config=default</code><br><code>&amp;redirect_url=http%3A%2F%2Flocalhost%3A8080%2Freset</code><br><code>&amp;reset_password_token=L77a9yx2JHehPCgVoQ2_</code> </li>
+<li>前端跳转 redirect url</li>
+<li>前端用 <code>reset_password_token</code>、client、uid 作 headers <code>PUT /auth/password</code> 完成重置</li>
+</ul>
+</blockquote>
+<p>观察链接，发现其中包含<code>reset_password_token</code>与<code>redirect_url</code>，点击跳转前端链接 <code>http://localhost:8080/reset?</code></p>
+<p><code>access-token=D3zacAdKrGwRPxcQ-9rnXQ&amp;</code></p>
+<p><code>client=CwF0zNBw9ovM3KmHaCmIIg&amp;</code></p>
+<p><code>client_id=CwF0zNBw9ovM3KmHaCmIIg&amp;</code></p>
+<p><code>config=default&amp;expiry=1538140242&amp;reset_password=true&amp;</code></p>
+<p><code>token=D3zacAdKrGwRPxcQ-9rnXQ&amp;</code></p>
+<p><code>uid=1%40e.com</code></p>
+<p>可见 headers 信息都有包含在 URL</p>
+<h2 id="问题"><a href="#问题" class="headerlink" title="问题"></a>问题</h2><p>网络中 devise token auth 重置密码相关的文章中使用 MVC，API的相对少，用 Vue 就更少。还得自己摸索。</p>
+<h3 id="问题1-hash-路径错位"><a href="#问题1-hash-路径错位" class="headerlink" title="问题1: hash 路径错位"></a>问题1: hash 路径错位</h3><p>最初在项目中 Vue-router 使用 hash 模式，故在请求 json 中填写 <code>redirect_url</code> 包含 #。而 rails 处理后忽略掉 # 造成路径错误，这里可以改用 history 模式解决。URL 中的参数可用 <code>route.query</code> 取出。</p>
+<p>另有 router navigation guard 的应设定确保不跳转，不然链接变成 <code>http://localhost:8080/reset?</code></p>
+<p><code>access-token=D3zacAdKrGwRPxcQ-9rnXQ&amp;</code></p>
+<p><code>client=CwF0zNBw9ovM3KmHaCmIIg&amp;</code></p>
+<p><code>client_id=CwF0zNBw9ovM3KmHaCmIIg&amp;</code></p>
+<p><code>config=default&amp;expiry=1538140242&amp;reset_password=true&amp;</code></p>
+<p><code>token=D3zacAdKrGwRPxcQ-9rnXQ&amp;uid=1%40e.com#/login</code></p>
+<p>这里本人设定未登录跳转登录页，跳转信息与重置 URL 混杂造成混乱。</p>
+<p>Vue 复用密码修改组件（若有登录后修改选项的话）可抽离 request 函数，通过判别是否有登录信息（如 Vuex state、sessionStorage）构造不同的 headers 发送请求。</p>
+<h3 id="问题2-后端路径-host-变前端-host（password-edit"><a href="#问题2-后端路径-host-变前端-host（password-edit" class="headerlink" title="问题2: 后端路径 host 变前端 host（password#edit)"></a>问题2: 后端路径 host 变前端 host（password#edit)</h3><p>原来 devise token anth 生成 reset password url 时取前端 host name，要是后端域名与之不同就出错。如前端 <code>a.com</code>，后端<code>b.com</code>，则邮件中生成 <code>http://a.com/api/v1/auth/password/edit?...</code>。看起来默认当作 MVC，是同域。 </p>
+<p>而在本地测试时同域端口不同没发现问题，可见靠同域不同端口区分。而部署到服务器用 80，443 端口就不区分了，怎么办呢？最后反代前端 /api 到 rails 解决。如 caddy 写法：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"># 前端</span><br><span class="line">a.com &#123; </span><br><span class="line">    root &#x2F;var&#x2F;www&#x2F;xxx</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"># 将错误路径导向 api</span><br><span class="line">a.com&#x2F;api &#123;</span><br><span class="line">    proxy &#x2F; locahost:3000&#x2F;api &#123;</span><br><span class="line">        transparent</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"># 后端</span><br><span class="line">b.com &#123;</span><br><span class="line">    proxy &#x2F; locahost:3000 &#123;</span><br><span class="line">        transparent</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="Bonus-custom-Devise-Token-Auth-registration-controller"><a href="#Bonus-custom-Devise-Token-Auth-registration-controller" class="headerlink" title="Bonus: custom Devise Token Auth registration controller"></a>Bonus: custom Devise Token Auth registration controller</h2><p>设定用户删除账户时会同时删除创建的活动、与报名信息（人都跑路，活动显然没了，报名也吹了）防止出错（活动详细页获取不到创建人信息，报名信息有 null）</p>
+<p>Devise Token Auth 中 用户注册、删除在 registration controller，默认删除操作只是完成用户删除不管别的。这时需要自定义。创建自定义类继承基类</p>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Users::RegistrationsController</span> &lt; DeviseTokenAuth::RegistrationsController</span></span><br><span class="line">  <span class="function"><span class="keyword">def</span> <span class="title">destroy</span></span></span><br><span class="line">    @resource.events.each(&amp;<span class="symbol">:destroy</span>)</span><br><span class="line">    @resource.bookings.each(&amp;<span class="symbol">:destroy</span>)</span><br><span class="line">    <span class="keyword">super</span></span><br><span class="line">  <span class="keyword">end</span></span><br><span class="line"><span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+<p>由于在基类中已经获取到资源</p>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">module</span> <span class="title">DeviseTokenAuth</span></span></span><br><span class="line">  <span class="class"><span class="keyword">class</span> <span class="title">RegistrationsController</span> &lt; DeviseTokenAuth::ApplicationController</span></span><br><span class="line">    before_action <span class="symbol">:set_user_by_token</span>, <span class="symbol">only:</span> [<span class="symbol">:destroy</span>, <span class="symbol">:update</span>] <span class="comment"># 这里 return <span class="doctag">@resource</span></span></span><br></pre></td></tr></table></figure>
+
+<p>因此可以直接使用，而不是向 super 加块处理。因为 super 的方法中块在 destroy 后</p>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">destroy</span></span></span><br><span class="line">      <span class="keyword">if</span> @resource</span><br><span class="line">        @resource.destroy</span><br><span class="line">        <span class="keyword">yield</span> @resource <span class="keyword">if</span> block_given? <span class="comment">#destroy 后找不到用户相关联的活动</span></span><br><span class="line">        render_destroy_success</span><br><span class="line">      <span class="keyword">else</span></span><br><span class="line">        render_destroy_error</span><br><span class="line">      <span class="keyword">end</span></span><br><span class="line">    <span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+<h2 id="后记"><a href="#后记" class="headerlink" title="后记"></a>后记</h2><p>其他问题好找，这个就没有了（估计第一篇Rails 5 API + Devise Token Auth + Vue 的密码重置流）。完成这个也算尾声了，现在将要部署，而 production 如何设定，dockerfile 如何写就一脸懵逼。若有运维可以赐教就感激不尽。</p>
+
+      
+      <!-- reward -->
+      
+    </div>
+      <!-- copyright -->
+      
+    <footer class="article-footer">
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Devise-Token-Auth/" rel="tag">Devise Token Auth</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Rails/" rel="tag">Rails</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%89%8D%E7%AB%AF/" rel="tag">前端</a></li></ul>
+
+
+    </footer>
+
+  </div>
+
+  
+
+  
+
+  
+
+</article>
+    
+    <article id="post-rubyProgLesson" class="article article-type-post" itemscope
+  itemprop="blogPost" data-scroll-reveal>
+
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h2 itemprop="name">
+  <a class="article-title" href="/2018/08/11/rubyProgLesson/"
+    >ルビィの Ruby 教室</a
+  >
+</h2>
+  
+
+    </header>
+    
+
+    
+    <div class="article-meta">
+      <a href="/2018/08/11/rubyProgLesson/" class="article-date">
+  <time datetime="2018-08-11T14:33:15.000Z" itemprop="datePublished">2018-08-11</time>
+</a>
+      
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a>
+  </div>
+
+      
+      
+      
+    </div>
+    
+
+    
+
+    <div class="article-entry" itemprop="articleBody">
+      
+
+
+      
+
+      
+      <blockquote>
+<p>想成为 Ruby girls 的众人，在露比老师的编程教室上？</p>
+</blockquote>
+<h2 id="1话-方法好像有点多"><a href="#1话-方法好像有点多" class="headerlink" title="1话 方法好像有点多"></a>1话 方法好像有点多</h2><p>露比「昨天的课程大家记住了吗」</p>
+<p>千歌「递归、算法…这么难的东西，完全不懂啊」</p>
+<p>露比「算法暂时用不到的啦」</p>
+<p>曜「露比酱，为什么我们要学 ruby 啊」</p>
+<p>露比「比起C，ruby更加简单呦（其实是和我名字相同啦）」</p>
+<p>千歌「唔哇，还有更加难的语言，好可怕」</p>
+<p>露比「今天的课题是链表，首先构建 ListNode 类试下」</p>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">ListNode</span></span></span><br><span class="line">  <span class="keyword">attr_accessor</span> <span class="symbol">:val</span>, <span class="symbol">:next_node</span></span><br><span class="line">  <span class="function"><span class="keyword">def</span> <span class="title">initialize</span><span class="params">(val)</span></span></span><br><span class="line">    @val = val</span><br><span class="line">    @next_node = <span class="literal">nil</span></span><br><span class="line">  <span class="keyword">end</span></span><br><span class="line"><span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+<p>露比「val 是结点的值，next_node 是指向下一个结点。好，来试试遍历一下」</p>
+<p>曜「遍历的话，一直循环到尾结点」</p>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">order_traversal</span><span class="params">(head)</span></span></span><br><span class="line">  <span class="keyword">until</span> head.<span class="literal">nil</span>?</span><br><span class="line">    puts head.val</span><br><span class="line">    head = head.next_node</span><br><span class="line">  <span class="keyword">end</span></span><br><span class="line"><span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+<p>露比「嗯，要是再将链表转换成数组呢」</p>
+<p>千歌「我知道我知道，把输出换成数组赋值」</p>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">order_traversal</span><span class="params">(head, array)</span></span></span><br><span class="line">  <span class="keyword">until</span> head.<span class="literal">nil</span>?</span><br><span class="line">    array &lt;&lt; head.val</span><br><span class="line">    head = head.next_node</span><br><span class="line">  <span class="keyword">end</span></span><br><span class="line"><span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+<p>千歌「嘿嘿，千歌我还是会一点的哟」</p>
+<p>露比「要是再将计数呢」</p>
+<p>千歌「那再改…」</p>
+<p>曜「要是每个都这样改，方法好像有点多啊」</p>
+<p>千歌「额，那怎么办呀」</p>
+<h2 id="2话-用块就可以啦ずら"><a href="#2话-用块就可以啦ずら" class="headerlink" title="2话 用块就可以啦ずら"></a>2话 用块就可以啦ずら</h2><p>曜「要不问下其他小队」</p>
+<p>夜羽「くくく，愚昧的凡人啊，就让堕天使夜羽给你们展示下黑魔法」</p>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">operator</span><span class="params">(head, name, *args)</span></span></span><br><span class="line">  send(name, head, *args)</span><br><span class="line"><span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+<p>夜羽「只要用 send 方法，可以省略成一个方法，并且传多少值都没问题」</p>
+<p>花丸「用了 send 也还是要定义其他方法，根本没有解决ずら」</p>
+<p>露比「其实这个可以用块简化一下」</p>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">traversal</span><span class="params">(&amp;block)</span></span></span><br><span class="line">  <span class="keyword">yield</span></span><br><span class="line">  next_node.traversal(&amp;block) <span class="keyword">if</span> next_node</span><br><span class="line"><span class="keyword">end</span></span><br><span class="line"></span><br><span class="line">list.traversal &#123; <span class="params">|x|</span> puts x.val &#125;</span><br><span class="line"></span><br><span class="line">array = []</span><br><span class="line">list.traversal &#123; <span class="params">|x|</span> array &lt;&lt; x.val &#125;</span><br></pre></td></tr></table></figure>
+
+<p>千歌「露比老师真厉害」</p>
+<p>梨子「看起来有点不对，测试一下」</p>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">NoMethodError:</span> undefined method <span class="string">`val' for nil:NilClass</span></span><br></pre></td></tr></table></figure>
+
+<p>夜羽「难道是被天界的敌人偷走了」</p>
+<p>梨子「看起来不行啊，夜酱，天界不会影响代码运行的啦」</p>
+<p>露比「诶，这个…呜呜姐姐」</p>
+<p>黛雅「露比，你啊没有指向 self。假如不涉及取值，yield 代指的块中代码运行没问题，要是有取值不指定就会返回nil」</p>
+<p>众人「原来如此」</p>
+<p>花丸「果然改为 yield(self) 就好了，未来ずら」</p>
+<h2 id="3话-深入递归"><a href="#3话-深入递归" class="headerlink" title="3话 深入递归"></a>3话 深入递归</h2><p>鞠莉「wow，ruby 比起 american 的 C 有趣多了」</p>
+<p>鞠莉「要是反转输出呢」</p>
+<p>千歌「先一个一个移动，到尾结点再往回输出，啊不好，找不到前面的结点了」</p>
+<p>果南「听说有个栈可以后入先出」</p>
+<p>梨子「递归也是运用栈，刚才的遍历就用了递归。那把 yield(self) 位置移动一下就可以先递归到尾结点」</p>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">reverse_traversal</span><span class="params">(&amp;block)</span></span></span><br><span class="line">  next_node.reverse_traversal(&amp;block) <span class="keyword">if</span> next_node</span><br><span class="line">  <span class="keyword">yield</span>(<span class="keyword">self</span>)</span><br><span class="line"><span class="keyword">end</span></span><br></pre></td></tr></table></figure>
+
+
+<h2 id="4话-Ruby-girls"><a href="#4话-Ruby-girls" class="headerlink" title="4话 Ruby girls"></a>4话 Ruby girls</h2><p>鞠莉「Amazing！ruby 真是优雅呢」</p>
+<p>果南「这么有趣的语言，我也提起兴趣了呢」</p>
+<p>露比「深入学习的话，还有更多优雅的特性等着我们」</p>
+<p>夜羽「くくく，堕天使夜羽早已窥见禁忌的元编程法术。小恶魔们放心，夜羽可不会被反噬的」</p>
+<p>花丸「刚才就乱用了ずら」</p>
+<p>夜羽「呀，才没有呢，ずら丸」</p>
+<p>曜「既然学习了 ruby，那我们就是 ruby girls 了呢」</p>
+<p>梨子「ruby girls，听起来不错呢」</p>
+<p>黛雅「『学而时习之，不亦说乎』要掌握知识还得要多加练习」</p>
+<p>千歌「嗯，为了成为更加闪耀的 ruby girl，还要继续努力练习啊，大家一起加油吧」</p>
+<p>众人「哦～～」</p>
+
+      
+      <!-- reward -->
+      
+    </div>
+      <!-- copyright -->
+      
+    <footer class="article-footer">
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Aqours/" rel="tag">Aqours</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Ruby/" rel="tag">Ruby</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%85%83%E7%BC%96%E7%A8%8B/" rel="tag">元编程</a></li></ul>
+
+
+    </footer>
+
+  </div>
+
+  
+
+  
+
+  
+
+</article>
+    
+    <article id="post-caddyHexo" class="article article-type-post" itemscope
+  itemprop="blogPost" data-scroll-reveal>
+
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h2 itemprop="name">
+  <a class="article-title" href="/2018/06/04/caddyHexo/"
+    >用 caddy git 为 Hexo 博客自动更新</a
+  >
+</h2>
+  
+
+    </header>
+    
+
+    
+    <div class="article-meta">
+      <a href="/2018/06/04/caddyHexo/" class="article-date">
+  <time datetime="2018-06-04T07:09:46.000Z" itemprop="datePublished">2018-06-04</time>
+</a>
+      
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a>
+  </div>
+
+      
+      
+      
+    </div>
+    
+
+    
+
+    <div class="article-entry" itemprop="articleBody">
+      
+
+
+      
+
+      
+      <h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>听闻萎软要收购 github，真是💊。本来 github 运营时氛围中立，倒向萎软必然引发顾虑。破坏良好的社区讨论氛围。因此决定自行架设代码托管服务。</p>
+<p>gitea 较为轻量，占用资源少，选用此 app 架设。之后将 blog clone 到 gitea。因为自有了代码托管，想到是否能用 hook 使其自动更新，因此参考 nickfan 的 <a href="https://nickfan.github.io/2018/01/05/caddy-hugo-acme/" target="_blank" rel="noopener">阿熊的Caddy+Hugo+Acme.sh配置填坑笔记</a> 一文配置 caddy。</p>
+<h2 id="设定"><a href="#设定" class="headerlink" title="设定"></a>设定</h2><p>设定 Caddyfile 为：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">blog.ckyol.moe &#123; &#x2F;&#x2F;地址</span><br><span class="line">    root &#x2F;var&#x2F;www&#x2F;hexo </span><br><span class="line">    git git.ckyol.moe&#x2F;ckyOL&#x2F;blog &#123; &#x2F;&#x2F;git地址</span><br><span class="line">        path &#x2F;var&#x2F;www&#x2F;hexo &#x2F;&#x2F;文件存放路径</span><br><span class="line">        hook &#x2F;webhook [secret] &#x2F;&#x2F;webhook 路径与 secret </span><br><span class="line">        hook_type gogs &#x2F;&#x2F;hook 类别，暂时不支援 gitea</span><br><span class="line">        clone_args --recursive &#x2F;&#x2F;clone 选项</span><br><span class="line">        pull_args --recurse-submodules &#x2F;&#x2F;pull 选项</span><br><span class="line">    &#125;</span><br><span class="line">    gzip</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="坑"><a href="#坑" class="headerlink" title="坑"></a>坑</h2><p>之后发现 caddy 启动失败，原来 caddy 启动不能动态加载，blog 需访问的 git 地址没有加载，因此启动失败。更改为 github 地址后测试成功。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>caddy git 更新需在启动时能访问其地址。可以交叉放置（两人互相 push 到对方服务器）。hexo 由于预先生成静态网页，就不需要像 hugo 添加 <code>then</code> 语句。</p>
+
+      
+      <!-- reward -->
+      
+    </div>
+      <!-- copyright -->
+      
+    <footer class="article-footer">
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/caddy/" rel="tag">caddy</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/hexo/" rel="tag">hexo</a></li></ul>
+
+
+    </footer>
+
+  </div>
+
+  
+
+  
+
+  
+
+</article>
+    
+    <article id="post-dataMisuse" class="article article-type-post" itemscope
+  itemprop="blogPost" data-scroll-reveal>
+
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h2 itemprop="name">
+  <a class="article-title" href="/2018/05/28/dataMisuse/"
+    >现今数据滥用现状与对策</a
+  >
+</h2>
+  
+
+    </header>
+    
+
+    
+    <div class="article-meta">
+      <a href="/2018/05/28/dataMisuse/" class="article-date">
+  <time datetime="2018-05-28T13:28:35.000Z" itemprop="datePublished">2018-05-28</time>
+</a>
+      
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a>
+  </div>
+
+      
+      
+      
+    </div>
+    
+
+    
+
+    <div class="article-entry" itemprop="articleBody">
+      
+
+
+      
+
+      
+      <h2 id="现状"><a href="#现状" class="headerlink" title="现状"></a>现状</h2><h3 id="价格歧视"><a href="#价格歧视" class="headerlink" title="价格歧视"></a>价格歧视</h3><blockquote>
+<p>价格歧视（Price discrimination）是独占者对同一种物品向某些消费者收取的价格高于另一些消费者，或者对少量购买的消费者收取的价格高于大量购买的消费者。通常以顾客对象、地区……等特性作为区分。但并不是所有的价格差别都是价格歧视。<br><a href="https://zh.wikipedia.org/wiki/%E4%BB%B7%E6%A0%BC%E6%AD%A7%E8%A7%86" target="_blank" rel="noopener">wiki</a></p>
+</blockquote>
+<p>资本家为最求利益最大化，针对不同消费者制定不同价格，最大化榨取剩余价值。在前互联网时代，资本家对消费者习惯了解程度不高，制定的价格策略不够精细。而如今可以通过大量数据获取每一个消费者精确的消费习惯，展现不同价格，由此榨取剩余价值最大化。</p>
+<h3 id="大数据杀熟"><a href="#大数据杀熟" class="headerlink" title="大数据杀熟"></a>大数据杀熟</h3><p>现在最明显的为大数据杀熟，如🐸乎问答展现各厂丑恶行径</p>
+<p><a href="https://www.zhihu.com/question/268104462" target="_blank" rel="noopener">如何看待大数据「杀熟」</a></p>
+<p>各厂利用各种数据刻画消费者模型，如注册时获取的个人信息、消费记录等。由此通过深度学习估算出最适价格。</p>
+<p>另一方面，各厂通过智能家居获取更多隐私数据。如果说以前只能获得消费者主动产生的数据，如今通过各类传感器就可以获得消费者被动产生的数据，如室内气温、饮水、空气、摄像头、出入记录等等。由此对消费者掌控程度大大加深。</p>
+<h2 id="解决"><a href="#解决" class="headerlink" title="解决"></a>解决</h2><h3 id="GDPR"><a href="#GDPR" class="headerlink" title="GDPR"></a>GDPR</h3><p>先进的欧洲在5月25日推行 GDPR（General Data Protection Regulation） 政策<a href="https://zh.wikipedia.org/wiki/%E6%AD%90%E7%9B%9F%E4%B8%80%E8%88%AC%E8%B3%87%E6%96%99%E4%BF%9D%E8%AD%B7%E8%A6%8F%E7%AF%84" target="_blank" rel="noopener">[1]</a>，<a href="http://www.cbdio.com/BigData/2017-02/09/content_5445910.htm" target="_blank" rel="noopener">翻译文本</a>。</p>
+<p>🐸乎这里有篇图文可以看看<a href="https://zhuanlan.zhihu.com/p/29918087" target="_blank" rel="noopener">欧盟GDPR：数据权利和安全责任【信息图】（翻译）</a></p>
+<p>国际大厂在5月陆续更新隐私策略，我朝厂就呵呵了。所以转用国际大厂、欧洲厂产品。</p>
+<h3 id="自架设"><a href="#自架设" class="headerlink" title="自架设"></a>自架设</h3><p>开源界为人民信息自由作出巨大贡献。许多服务都可自架设，如RSS——<a href="https://tt-rss.org/" target="_blank" rel="noopener">tiny tiny rss</a>、bbs——<a href="https://github.com/NodeBB/NodeBB" target="_blank" rel="noopener">nodeBB</a>、聊天室<a href="https://matrix.org/blog/home/" target="_blank" rel="noopener">matrix</a>、微博客<a href="https://github.com/tootsuite/mastodon" target="_blank" rel="noopener">mastodon</a>等等。由此获得与各厂产品同等体验的同时把数据留在自己服务器中。自己掌握实体服务器最为安全，若不能，使用VPS。VPS运营商就算获取到信息也不能用做训练集，更不会交给大厂。</p>
+<h3 id="自造智能家居"><a href="#自造智能家居" class="headerlink" title="自造智能家居"></a>自造智能家居</h3><p>现今有廉价芯片 esp8266 较适宜，其集成 wifi 芯片，兼容 arduino。可刷 <a href="https://www.letscontrolit.com/wiki/index.php/ESPEasy" target="_blank" rel="noopener">espeasy</a> 固件控制各类传感器。</p>
+<p>买板子 nodeMCU 最方便使用，其集成TTL直接用usb线连接刷板子。<a href="https://s.taobao.com/search?q=nodemcu&imgfile=&commend=all&ssid=s5-e&search_type=item&sourceId=tb.index&spm=a21bo.2017.201856-taobao-item.1&ie=utf8&initiative_id=tbindexz_20170306" target="_blank" rel="noopener">某宝十几块</a></p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>因此安全性：自己服务器/自造智能家居 &gt; VPS 架设 &gt; 遵守 GDPR 的厂产品</p>
+
+      
+      <!-- reward -->
+      
+    </div>
+      <!-- copyright -->
+      
+    <footer class="article-footer">
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%A4%A7%E6%95%B0%E6%8D%AE/" rel="tag">大数据</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%BC%80%E6%BA%90/" rel="tag">开源</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E9%98%B6%E7%BA%A7%E6%96%97%E4%BA%89/" rel="tag">阶级斗争</a></li></ul>
+
+
+    </footer>
+
+  </div>
+
+  
+
+  
+
+  
+
+</article>
+    
+    <article id="post-songLifeCycle" class="article article-type-post" itemscope
+  itemprop="blogPost" data-scroll-reveal>
+
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h2 itemprop="name">
+  <a class="article-title" href="/2018/05/02/songLifeCycle/"
+    >Aqours 歌曲生命周期统计</a
+  >
+</h2>
+  
+
+    </header>
+    
+
+    
+    <div class="article-meta">
+      <a href="/2018/05/02/songLifeCycle/" class="article-date">
+  <time datetime="2018-05-02T14:16:31.000Z" itemprop="datePublished">2018-05-02</time>
+</a>
+      
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a> / <a class="article-category-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/ACG/">ACG</a>
+  </div>
+
+      
+      
+      
+    </div>
+    
+
+    
+
+    <div class="article-entry" itemprop="articleBody">
+      
+
+
+      
+
+      
+      <h2 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h2><p>今日在水水群聊起 3rd live，接着发现这三单出了这么久还没四单，生命周期真长。再看小队单也是差不多同一批次，这其中貌似隐藏着某些规律，故统计分析一番。</p>
+<h2 id="生命周期"><a href="#生命周期" class="headerlink" title="生命周期"></a>生命周期</h2><p>首先定义一下生命周期。<strong>生命周期（Life Cycle）</strong>为歌曲一张发行至下一张发行时所经历的时间。如《君のこころは輝いてるかい？》在2015年10月7日发行，《恋になりたいAQUARIUM》在2016年4月27日发行，则一单的生命周期为2015年10月7日至2016年4月27日的 <strong>6个月20天</strong>。</p>
+<h2 id="图形绘制"><a href="#图形绘制" class="headerlink" title="图形绘制"></a>图形绘制</h2><p>一开始当然想用 python 画图，搜一圈没发现什么优雅甘特图绘画包，这时想起JS也有数据可视化库，一艘发现 google chart 有 <a href="https://developers.google.com/chart/interactive/docs/gallery/timeline" target="_blank" rel="noopener">Timelines</a> 。其优雅美观，使用方便，故选用画图。</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line">google.charts.load(<span class="string">"current"</span>, &#123;<span class="attr">packages</span>:[<span class="string">"timeline"</span>]&#125;);</span><br><span class="line">google.charts.setOnLoadCallback(drawChart);</span><br><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">drawChart</span>(<span class="params"></span>) </span>&#123;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">var</span> container = <span class="built_in">document</span>.getElementById(<span class="string">'chart'</span>);</span><br><span class="line">  <span class="keyword">var</span> chart = <span class="keyword">new</span> google.visualization.Timeline(container);</span><br><span class="line">  <span class="keyword">var</span> dataTable = <span class="keyword">new</span> google.visualization.DataTable();</span><br><span class="line">  dataTable.addColumn(&#123; <span class="attr">type</span>: <span class="string">'string'</span>, <span class="attr">id</span>: <span class="string">'Position'</span> &#125;);</span><br><span class="line">  dataTable.addColumn(&#123; <span class="attr">type</span>: <span class="string">'string'</span>, <span class="attr">id</span>: <span class="string">'Name'</span> &#125;);</span><br><span class="line">  dataTable.addColumn(&#123; <span class="attr">type</span>: <span class="string">'date'</span>, <span class="attr">id</span>: <span class="string">'Start'</span> &#125;);</span><br><span class="line">  dataTable.addColumn(&#123; <span class="attr">type</span>: <span class="string">'date'</span>, <span class="attr">id</span>: <span class="string">'End'</span> &#125;);</span><br><span class="line">  dataTable.addRows([</span><br><span class="line">    [ <span class="string">'单曲'</span>, <span class="string">'君こころ'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2015</span>,<span class="number">10</span>,<span class="number">7</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2016</span>,<span class="number">4</span>,<span class="number">27</span>) ],</span><br><span class="line">    [ <span class="string">'单曲'</span>, <span class="string">'恋Aqua'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2016</span>,<span class="number">4</span>,<span class="number">27</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">4</span>,<span class="number">5</span>) ],</span><br><span class="line">    [ <span class="string">'单曲'</span>, <span class="string">'HPT'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">4</span>,<span class="number">5</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2018</span>,<span class="number">5</span>,<span class="number">2</span>) ],</span><br><span class="line">    [<span class="string">'CYaRon'</span>, <span class="string">'元気'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2016</span>,<span class="number">5</span>,<span class="number">11</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">5</span>,<span class="number">10</span>)],</span><br><span class="line">    [<span class="string">'CYaRon'</span>, <span class="string">'近未来'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">5</span>,<span class="number">10</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2018</span>,<span class="number">5</span>,<span class="number">2</span>)],</span><br><span class="line">    [<span class="string">'AZALEA'</span>, <span class="string">'トリコ'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2016</span>,<span class="number">5</span>,<span class="number">25</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">5</span>,<span class="number">31</span>)],</span><br><span class="line">    [<span class="string">'AZALEA'</span>, <span class="string">'GHS'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">5</span>,<span class="number">31</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2018</span>,<span class="number">5</span>,<span class="number">2</span>)],</span><br><span class="line">    [<span class="string">'GK'</span>, <span class="string">'ST'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2016</span>,<span class="number">6</span>,<span class="number">8</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">6</span>,<span class="number">21</span>)],</span><br><span class="line">    [<span class="string">'GK'</span>, <span class="string">'コワヤス'</span>, <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2017</span>,<span class="number">6</span>,<span class="number">21</span>), <span class="keyword">new</span> <span class="built_in">Date</span>(<span class="number">2018</span>,<span class="number">5</span>,<span class="number">2</span>)],</span><br><span class="line"></span><br><span class="line">  ]);</span><br><span class="line"></span><br><span class="line">  chart.draw(dataTable);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>只要在 dataTable 中 addRows 加入起止日期即可画出时间端。</p>
+<h2 id="统计"><a href="#统计" class="headerlink" title="统计"></a>统计</h2><center>
+表 1 生命周期统计表（日期数据为年月日，截止2018.5.2）
+</center>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>单曲</td>
+<td>0,6,20</td>
+<td>0,11,8</td>
+<td>1,0,28</td>
+</tr>
+<tr>
+<td>CYaRon</td>
+<td>0,11,30</td>
+<td>0,11,28</td>
+<td></td>
+</tr>
+<tr>
+<td>AZALEA</td>
+<td>1,0,6</td>
+<td>0,11,1</td>
+<td></td>
+</tr>
+<tr>
+<td>Guilty Kiss</td>
+<td>1,0,13</td>
+<td>0,10,12</td>
+<td></td>
+</tr>
+</tbody></table>
+<p>观察表1发现，单曲生命周期逐渐增常，联想3单发售的2017年各类活动大量增加，故没时间录制4单。CYaRon 生命周期较接近，为近12月。其他小队1单生命周期长而显得2单未超越。纵向比较，CYaRon 至 GK 生命周期增加，推测依曲风制作难度增加，需要更多时间。</p>
+<p>若小队单符合周期，则近期应有小队单发售。而如今未有消息，说明制作周期增加。</p>
+<h2 id="成果"><a href="#成果" class="headerlink" title="成果"></a>成果</h2><p>html 传至 VPS，<a href="https://chart.ckyol.moe/life.html" target="_blank" rel="noopener">点击访问</a></p>
+
+      
+      <!-- reward -->
+      
+    </div>
+      <!-- copyright -->
+      
+    <footer class="article-footer">
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Aqours/" rel="tag">Aqours</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/JavaScript/" rel="tag">JavaScript</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/LoveLive/" rel="tag">LoveLive</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E6%B0%B4%E5%AD%A6/" rel="tag">水学</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F%E7%BB%9F%E8%AE%A1/" rel="tag">生命周期统计</a></li></ul>
+
+
+    </footer>
+
+  </div>
+
+  
+
+  
+
+  
+
+</article>
+    
+    <article id="post-tweetWeaName" class="article article-type-post" itemscope
+  itemprop="blogPost" data-scroll-reveal>
+
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h2 itemprop="name">
+  <a class="article-title" href="/2018/04/16/tweetWeaName/"
+    >Twitter 名称自动更新天气 emoji 的实现</a
+  >
+</h2>
+  
+
+    </header>
+    
+
+    
+    <div class="article-meta">
+      <a href="/2018/04/16/tweetWeaName/" class="article-date">
+  <time datetime="2018-04-16T03:43:11.000Z" itemprop="datePublished">2018-04-16</time>
+</a>
+      
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a>
+  </div>
+
+      
+      
+      
+    </div>
+    
+
+    
+
+    <div class="article-entry" itemprop="articleBody">
+      
+
+
+      
+
+      
+      <h2 id="启发"><a href="#启发" class="headerlink" title="启发"></a>启发</h2><p>最近逛 Qiita 时看到这篇文章：</p>
+<blockquote>
+<p>Twitterの名前を5分毎に東京の天気☼☂☃と連動させるサーバレスプログラムを書いたら色々知らないことが出てきた話<br><a href="https://qiita.com/issei_y/items/ab641746be2704db98be" target="_blank" rel="noopener">https://qiita.com/issei_y/items/ab641746be2704db98be</a></p>
+</blockquote>
+<p>其通过 AWSLambda 来定期运行更新任务，我既有了 VPS 就不用 AWS 啦。因此用 python 写个 app 来跑。</p>
+<h2 id="App"><a href="#App" class="headerlink" title="App"></a>App</h2><h3 id="天气"><a href="#天气" class="headerlink" title="天气"></a>天气</h3><p>获取天气信息如文中选用 OpenWeatherMap 的 API。用 requests GET 得 json 后取得 icon 字段数据</p>
+<p>json 样本</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line">&#123;</span><br><span class="line">    <span class="attr">"coord"</span>: &#123;</span><br><span class="line">        <span class="attr">"lon"</span>: <span class="number">145.77</span>,</span><br><span class="line">        <span class="attr">"lat"</span>: <span class="number">-16.92</span></span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="attr">"weather"</span>: [</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="attr">"id"</span>: <span class="number">802</span>,</span><br><span class="line">            <span class="attr">"main"</span>: <span class="string">"Clouds"</span>,</span><br><span class="line">            <span class="attr">"description"</span>: <span class="string">"scattered clouds"</span>,</span><br><span class="line">            <span class="attr">"icon"</span>: <span class="string">"03n"</span></span><br><span class="line">        &#125;</span><br><span class="line">    ],</span><br><span class="line">    <span class="attr">"base"</span>: <span class="string">"stations"</span>,</span><br><span class="line">    <span class="attr">"main"</span>: &#123;</span><br><span class="line">        <span class="attr">"temp"</span>: <span class="number">300.15</span>,</span><br><span class="line">        <span class="attr">"pressure"</span>: <span class="number">1007</span>,</span><br><span class="line">        <span class="attr">"humidity"</span>: <span class="number">74</span>,</span><br><span class="line">        <span class="attr">"temp_min"</span>: <span class="number">300.15</span>,</span><br><span class="line">        <span class="attr">"temp_max"</span>: <span class="number">300.15</span></span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="attr">"visibility"</span>: <span class="number">10000</span>,</span><br><span class="line">    <span class="attr">"wind"</span>: &#123;</span><br><span class="line">        <span class="attr">"speed"</span>: <span class="number">3.6</span>,</span><br><span class="line">        <span class="attr">"deg"</span>: <span class="number">160</span></span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="attr">"clouds"</span>: &#123;</span><br><span class="line">        <span class="attr">"all"</span>: <span class="number">40</span></span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="attr">"dt"</span>: <span class="number">1485790200</span>,</span><br><span class="line">    <span class="attr">"sys"</span>: &#123;</span><br><span class="line">        <span class="attr">"type"</span>: <span class="number">1</span>,</span><br><span class="line">        <span class="attr">"id"</span>: <span class="number">8166</span>,</span><br><span class="line">        <span class="attr">"message"</span>: <span class="number">0.2064</span>,</span><br><span class="line">        <span class="attr">"country"</span>: <span class="string">"AU"</span>,</span><br><span class="line">        <span class="attr">"sunrise"</span>: <span class="number">1485720272</span>,</span><br><span class="line">        <span class="attr">"sunset"</span>: <span class="number">1485766550</span></span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="attr">"id"</span>: <span class="number">2172797</span>,</span><br><span class="line">    <span class="attr">"name"</span>: <span class="string">"Cairns"</span>,</span><br><span class="line">    <span class="attr">"cod"</span>: <span class="number">200</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="emoji-转换"><a href="#emoji-转换" class="headerlink" title="emoji 转换"></a>emoji 转换</h3><p>为 <del>偷懒</del> 简化程序，直接通过 icon 字段来转换 emoji。可见 <a href="https://openweathermap.org/weather-conditions" target="_blank" rel="noopener">Weather Conditions</a></p>
+<p>python 没 switch/case，采用 dict 映射</p>
+<h3 id="Twitter-名更新"><a href="#Twitter-名更新" class="headerlink" title="Twitter 名更新"></a>Twitter 名更新</h3><p>选用 <a href="http://www.tweepy.org/" target="_blank" rel="noopener">tweepy</a><br>来更新 twitter 名，参见 <a href="http://tweepy.readthedocs.io/en/v3.5.0/" target="_blank" rel="noopener">doc</a></p>
+<h3 id="自动更新"><a href="#自动更新" class="headerlink" title="自动更新"></a>自动更新</h3><p>采用 APScheduler 来定时更新。可以设定时间点、时间间隔。</p>
+<h2 id="成品"><a href="#成品" class="headerlink" title="成品"></a>成品</h2><h3 id="github"><a href="#github" class="headerlink" title="github"></a>github</h3><p>已 po 去 <del>gay </del>github <a href="https://github.com/ckyOL/twitterWeatherName" target="_blank" rel="noopener">twitterWeatherName</a></p>
+<h3 id="Docker"><a href="#Docker" class="headerlink" title="Docker"></a>Docker</h3><p>已 push 去 dockerhub <a href="https://hub.docker.com/r/ckyol/twitter-weather-name/" target="_blank" rel="noopener">docker</a></p>
+<h2 id="再开脑洞"><a href="#再开脑洞" class="headerlink" title="再开脑洞"></a>再开脑洞</h2><p>联结 homeassistant 自动化，监测自宅温度更新 twitter。联结其他web服务等等。</p>
+
+      
+      <!-- reward -->
+      
+    </div>
+      <!-- copyright -->
+      
+    <footer class="article-footer">
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/OpenWeatherMap/" rel="tag">OpenWeatherMap</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Python/" rel="tag">Python</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Twitter/" rel="tag">Twitter</a></li></ul>
+
+
+    </footer>
+
+  </div>
+
+  
+
+  
+
+  
+
+</article>
+    
+  </article>
+  
+
+  
+  <nav class="page-nav">
+    
+    <span class="page-number current">1</span><a class="page-number" href="/page/2/">2</a><a class="page-number" href="/page/3/">3</a><a class="extend next" rel="next" href="/page/2/">下一页</a>
+  </nav>
+  
+</section>
+</div>
+
+      <footer class="footer">
+  <div class="outer">
+    <ul class="list-inline">
+      <li>
+        &copy;
+        2016-2020
+        cky
+      </li>
+      <li>
+        
+          Powered by
+        
+        
+        <a href="https://hexo.io" target="_blank">Hexo</a> Theme <a href="https://github.com/Shen-Yu/hexo-theme-ayer" target="_blank">Ayer</a>
+        
+      </li>
+    </ul>
+    <ul class="list-inline">
+      <li>
+        
+      </li>
+      <li>
+        <!-- cnzz统计 -->
+        
+      </li>
+    </ul>
+  </div>
+</footer>
+    <div class="to_top">
+        <div class="totop" id="totop">
+  <i class="ri-arrow-up-line"></i>
+</div>
+      </div>
+    </main>
+      <aside class="sidebar">
+        <button class="navbar-toggle"></button>
+<nav class="navbar">
+  
+  <div class="logo">
+    <a href="/"><img src="/images/side.svg" alt="ckyOL&#39;s b10g"></a>
+  </div>
+  
+  <ul class="nav nav-main">
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/">主页</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/archives">归档</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/categories">分类</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/tags">标签</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/2016/04/24/friendLink">友链</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="https://peing.net/ckyol" target="_blank" rel="noopener">Peing</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/2016/04/24/about">关于我</a>
+    </li>
+    
+  </ul>
+</nav>
+<nav class="navbar navbar-bottom">
+  <ul class="nav">
+    <li class="nav-item">
+      
+      <a class="nav-item-link nav-item-search"  title="搜索">
+        <i class="ri-search-line"></i>
+      </a>
+      
+      
+      <a class="nav-item-link" target="_blank" href="/atom.xml" title="RSS Feed">
+        <i class="ri-rss-line"></i>
+      </a>
+      
+    </li>
+  </ul>
+</nav>
+<div class="search-form-wrap">
+  <div class="local-search local-search-plugin">
+  <input type="search" id="local-search-input" class="local-search-input" placeholder="Search...">
+  <div id="local-search-result" class="local-search-result"></div>
+</div>
+</div>
+      </aside>
+      <div id="mask"></div>
+
+<!-- #reward -->
+<div id="reward">
+  <span class="close"><i class="ri-close-line"></i></span>
+  <p class="reward-p"><i class="ri-cup-line"></i>请我喝杯咖啡吧~</p>
+  <div class="reward-box">
+    
+    <div class="reward-item">
+      <img class="reward-img" src="/images/alipay.png">
+      <span class="reward-type">支付宝</span>
+    </div>
+    
+    
+  </div>
+</div>
+      
+<script src="/js/jquery-2.0.3.min.js"></script>
+
+
+<script src="/js/jquery.justifiedGallery.min.js"></script>
+
+
+<script src="/js/lazyload.min.js"></script>
+
+
+<script src="/js/busuanzi-2.3.pure.min.js"></script>
+
+
+<script src="/js/share.js"></script>
+
+
+
+
+<script>
+  try {
+    var typed = new Typed("#subtitle", {
+    strings: ['技术','宅圈',''],
+    startDelay: 0,
+    typeSpeed: 200,
+    loop: true,
+    backSpeed: 100,
+    showCursor: true
+    });
+  } catch (err) {
+  }
+  
+</script>
+
+
+
+
+<script>
+  var ayerConfig = {
+    mathjax: true
+  }
+</script>
+
+
+<script src="/js/ayer.js"></script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/jquery-modal@0.9.2/jquery.modal.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery-modal@0.9.2/jquery.modal.min.css">
+
+
+<!-- Root element of PhotoSwipe. Must have class pswp. -->
+<div class="pswp" tabindex="-1" role="dialog" aria-hidden="true">
+
+    <!-- Background of PhotoSwipe. 
+         It's a separate element as animating opacity is faster than rgba(). -->
+    <div class="pswp__bg"></div>
+
+    <!-- Slides wrapper with overflow:hidden. -->
+    <div class="pswp__scroll-wrap">
+
+        <!-- Container that holds slides. 
+            PhotoSwipe keeps only 3 of them in the DOM to save memory.
+            Don't modify these 3 pswp__item elements, data is added later on. -->
+        <div class="pswp__container">
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+        </div>
+
+        <!-- Default (PhotoSwipeUI_Default) interface on top of sliding area. Can be changed. -->
+        <div class="pswp__ui pswp__ui--hidden">
+
+            <div class="pswp__top-bar">
+
+                <!--  Controls are self-explanatory. Order can be changed. -->
+
+                <div class="pswp__counter"></div>
+
+                <button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+
+                <button class="pswp__button pswp__button--share" style="display:none" title="Share"></button>
+
+                <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+
+                <button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button>
+
+                <!-- Preloader demo http://codepen.io/dimsemenov/pen/yyBWoR -->
+                <!-- element will get class pswp__preloader--active when preloader is running -->
+                <div class="pswp__preloader">
+                    <div class="pswp__preloader__icn">
+                        <div class="pswp__preloader__cut">
+                            <div class="pswp__preloader__donut"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
+                <div class="pswp__share-tooltip"></div>
+            </div>
+
+            <button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+            </button>
+
+            <button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)">
+            </button>
+
+            <div class="pswp__caption">
+                <div class="pswp__caption__center"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.css">
+<script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js"></script>
+
+<script>
+    function viewer_init() {
+        let pswpElement = document.querySelectorAll('.pswp')[0];
+        let $imgArr = document.querySelectorAll(('.article-entry img:not(.reward-img)'))
+
+        $imgArr.forEach(($em, i) => {
+            $em.onclick = () => {
+                // slider展开状态
+                // todo: 这样不好，后面改成状态
+                if (document.querySelector('.left-col.show')) return
+                let items = []
+                $imgArr.forEach(($em2, i2) => {
+                    let img = $em2.getAttribute('data-idx', i2)
+                    let src = $em2.getAttribute('data-target') || $em2.getAttribute('src')
+                    let title = $em2.getAttribute('alt')
+                    // 获得原图尺寸
+                    const image = new Image()
+                    image.src = src
+                    items.push({
+                        src: src,
+                        w: image.width || $em2.width,
+                        h: image.height || $em2.height,
+                        title: title
+                    })
+                })
+                var gallery = new PhotoSwipe(pswpElement, PhotoSwipeUI_Default, items, {
+                    index: parseInt(i)
+                });
+                gallery.init()
+            }
+        })
+    }
+    viewer_init()
+</script>
+
+
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+      tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      }
+  });
+
+  MathJax.Hub.Queue(function() {
+      var all = MathJax.Hub.getAllJax(), i;
+      for(i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+      }
+  });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/mathjax@2.7.6/unpacked/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+<script type="text/javascript" src="https://js.users.51.la/20544303.js"></script>
+  </div>
+</body>
+
+</html>

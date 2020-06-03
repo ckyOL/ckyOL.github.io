@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+   
+  <meta name="keywords" content="技术 宅圈" />
+   
+  <meta name="description" content="技术、宅圈" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>
+    helm 架设 mattermost 踩坑 |  ckyOL&#39;s b10g
+  </title>
+  <meta name="generator" content="hexo-theme-yilia-plus">
+  
+  <link rel="shortcut icon" href="/images/my.ico" />
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+<script src="/js/pace.min.js"></script>
+
+
+  
+
+<script type="text/javascript">
+(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+})(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+ga('create', 'UA-10375098-9', 'auto');
+ga('send', 'pageview');
+
+</script>
+
+
+
+  
+
+<link rel="alternate" href="/atom.xml" title="ckyOL's b10g" type="application/atom+xml">
+</head>
+
+</html>
+
+<body>
+  <div id="app">
+    <main class="content">
+      <section class="outer">
+  <article id="post-mattermostHelmPitfalls" class="article article-type-post" itemscope
+  itemprop="blogPost" data-scroll-reveal>
+
+  <div class="article-inner">
+    
+    <header class="article-header">
+       
+<h1 class="article-title sea-center" style="border-left:0" itemprop="name">
+  helm 架设 mattermost 踩坑
+</h1>
+  
+
+    </header>
+    
+
+    
+    <div class="article-meta">
+      <a href="/2020/02/29/mattermostHelmPitfalls/" class="article-date">
+  <time datetime="2020-02-29T12:15:38.000Z" itemprop="datePublished">2020-02-29</time>
+</a>
+      
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a>
+  </div>
+
+      
+      
+<div class="word_count">
+    <span class="post-time">
+        <span class="post-meta-item-icon">
+            <i class="ri-quill-pen-line"></i>
+            <span class="post-meta-item-text"> 字数统计:</span>
+            <span class="post-count">859字</span>
+        </span>
+    </span>
+
+    <span class="post-time">
+        &nbsp; | &nbsp;
+        <span class="post-meta-item-icon">
+            <i class="ri-book-open-line"></i>
+            <span class="post-meta-item-text"> 阅读时长≈</span>
+            <span class="post-count">3分钟</span>
+        </span>
+    </span>
+</div>
+
+      
+    </div>
+    
+
+    
+    
+    <div class="tocbot"></div>
+
+
+
+
+
+    
+
+    <div class="article-entry" itemprop="articleBody">
+      
+
+
+      
+
+      
+      <h2 id="工作"><a href="#工作" class="headerlink" title="工作"></a>工作</h2><p>却说社畜以来，做了兼职 <del>半吊子</del> 运维，用 k8s 部署些前后端。现在疫情影响，大家广泛应用远程办公工具，这公务交流显然要用专业工具。先前试用 slack，但毕竟在美帝受墙干扰，且免费版限制多，于是决定切换到自架 mattermost</p>
+<h2 id="matternost"><a href="#matternost" class="headerlink" title="matternost"></a>matternost</h2><blockquote>
+<p>Mattermost is a flexible, open source messaging platform<br>that enables secure team collaboration</p>
+</blockquote>
+<p>根据官网 <del>吹逼</del> 宣传，mattermost 是个开源的团队交流工具，看 UI 也和 slack 相近，用起来应该没有问题，甚至还用中文。注意到还有 <a href="https://github.com/mattermost/mattermost-helm" target="_blank" rel="noopener">helm 版</a> 。有了这个可部署方便多了</p>
+<h2 id="踩坑"><a href="#踩坑" class="headerlink" title="踩坑"></a>踩坑</h2><p>于是按照文档开始部署，坑就来了。</p>
+<h3 id="1-toyaml-error"><a href="#1-toyaml-error" class="headerlink" title="1. toyaml error"></a>1. toyaml error</h3><p>首先按所需变量一填，没想到报 toYaml error。原本以为 github 撞墙，下回来 tgz 在🐧☁️上开 darkhttpd ，没想到不是这个问题。没办法看下 yaml，原来是 resource 要填。原以为是 mattermost 的变量，没想到是 k8s 的 resource。以前创的时候用🐧☁️图形化没注意到😓</p>
+<h3 id="2-pod-has-unbound-PersistentVolumeClaims"><a href="#2-pod-has-unbound-PersistentVolumeClaims" class="headerlink" title="2. pod has unbound PersistentVolumeClaims"></a>2. pod has unbound PersistentVolumeClaims</h3><p>填上 resource 后接着来，这下没报错了。跑去集群一看，没启动起来，报<code>pod has unbound PersistentVolumeClaims</code>。以为硬盘不够，一看也还有空间。跑去集群——存储看看，没想到🐧☁️开存储最少开 10G，而 mattermost plugins 开 1G。是 1G 开不出来</p>
+<h3 id="3-read-only-file-system"><a href="#3-read-only-file-system" class="headerlink" title="3. read only file system"></a>3. read only file system</h3><p>再改配置开 10G，终于跑起来了。想着终于部署完了，进入后台开始配置，一点保存没想到又报错，看 log 发现报<code>open /mattermost/config/config.json: read-only file system</code>。配置是只读，这就没道理。逛下 github issue 发现  <a href="https://github.com/mattermost/mattermost-helm/issues/100" target="_blank" rel="noopener">mattermost/mattermost-helm#100</a> 有报这个问题，原来 matternost 把配置做 secret 而只读，总不能改个配置就重新部署一下。按照评论使用<code>extraInitContainers</code>把 config.json 拷去 data 空间，就可以读了。</p>
+<p><code>extraInitContainers</code> 使用了一个 alpine 来执行 cp 命令，这些配置</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">extraInitContainers:</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">copy-config</span></span><br><span class="line"><span class="attr">    image:</span> <span class="string">"alpine:latest"</span></span><br><span class="line"><span class="attr">    imagePullPolicy:</span> <span class="string">IfNotPresent</span></span><br><span class="line"><span class="attr">    volumeMounts:</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/config/config.json</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">config-json</span></span><br><span class="line"><span class="attr">      subPath:</span> <span class="string">config.json</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">mattermost-data</span></span><br><span class="line"><span class="attr">    command:</span> <span class="string">["/bin/ash",</span> <span class="string">"-c"</span><span class="string">,</span> <span class="string">"cp -f /mattermost/config/config.json /mattermost/data/config.json"</span><span class="string">]</span></span><br><span class="line"><span class="attr">extraEnvVars:</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">MM_CONFIG</span></span><br><span class="line"><span class="attr">    value:</span> <span class="string">"/mattermost/data/config.json"</span></span><br></pre></td></tr></table></figure>
+<p>按🐧☁️ key-value 写显然要命，就得想想用其他方法。这种写作 yaml 最方便，看 helm 可以用 -f 指定文件，按🐧☁️<a href="https://cloud.tencent.com/document/product/457/32731" target="_blank" rel="noopener">文档</a> 可以用 helm 客户端连进去，于是先开 kubectl 内网访问，后开 helm 连接进去。</p>
+<h3 id="4-permission-denied"><a href="#4-permission-denied" class="headerlink" title="4.permission denied"></a>4.permission denied</h3><p>这次用 yaml 创出来了再去配置又报 <code>open /mattermost/data/config.json: permission denied</code>，我寻思 mattermost 还能对自己 data 空间没权限，再逛逛 issue 发现  <a href="https://github.com/mattermost/mattermost-helm/issues/120" target="_blank" rel="noopener">mattermost/mattermost-helm#120</a> 使用 busybox 来赋予权限。按照这样先赋权后拷贝，应该就可以有权限更改了。</p>
+<h2 id="终章"><a href="#终章" class="headerlink" title="终章"></a>终章</h2><p>经过这些配置后发现在 5.13.2 版本下没问题，估计 tgz 只适配 5.13.2 版本。列出示例配置：</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">resources:</span></span><br><span class="line"><span class="attr">  limits:</span></span><br><span class="line"><span class="attr">    cpu:</span> <span class="number">500</span><span class="string">m</span></span><br><span class="line"><span class="attr">    memory:</span> <span class="number">1</span><span class="string">Gi</span></span><br><span class="line"><span class="attr">  requests:</span></span><br><span class="line"><span class="attr">    cpu:</span> <span class="number">100</span><span class="string">m</span></span><br><span class="line"><span class="attr">    memory:</span> <span class="number">512</span><span class="string">Mi</span></span><br><span class="line"></span><br><span class="line"><span class="attr">persistence:</span></span><br><span class="line"><span class="attr">  plugins:</span></span><br><span class="line"><span class="attr">    size:</span> <span class="number">10</span><span class="string">Gi</span></span><br><span class="line">  </span><br><span class="line"><span class="attr">extraEnvVars:</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">MM_CONFIG</span></span><br><span class="line"><span class="attr">    value:</span> <span class="string">"/mattermost/data/config.json"</span></span><br><span class="line"></span><br><span class="line"><span class="attr">extraInitContainers:</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">set-plugins-owner</span></span><br><span class="line"><span class="attr">    command:</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">sh</span></span><br><span class="line"><span class="bullet">    -</span> <span class="bullet">-c</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">chown</span> <span class="bullet">-R</span> <span class="number">2000</span><span class="string">:2000</span> <span class="string">/mattermost/plugins</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">chgrp</span> <span class="number">2000</span> <span class="string">/mattermost/plugins</span></span><br><span class="line"><span class="attr">    image:</span> <span class="attr">busybox:1.29.2</span></span><br><span class="line"><span class="attr">    imagePullPolicy:</span> <span class="string">IfNotPresent</span></span><br><span class="line"><span class="attr">    resources:</span> <span class="string">&#123;&#125;</span></span><br><span class="line"><span class="attr">    securityContext:</span></span><br><span class="line"><span class="attr">      privileged:</span> <span class="literal">true</span></span><br><span class="line"><span class="attr">    terminationMessagePath:</span> <span class="string">/dev/termination-log</span></span><br><span class="line"><span class="attr">    terminationMessagePolicy:</span> <span class="string">File</span></span><br><span class="line"><span class="attr">    volumeMounts:</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/plugins</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">mattermost-plugins</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">set-data-owner</span></span><br><span class="line"><span class="attr">    command:</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">sh</span></span><br><span class="line"><span class="bullet">    -</span> <span class="bullet">-c</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">chown</span> <span class="bullet">-R</span> <span class="number">2000</span><span class="string">:2000</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="bullet">    -</span> <span class="string">chgrp</span> <span class="number">2000</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="attr">    image:</span> <span class="attr">busybox:1.29.2</span></span><br><span class="line"><span class="attr">    imagePullPolicy:</span> <span class="string">IfNotPresent</span></span><br><span class="line"><span class="attr">    resources:</span> <span class="string">&#123;&#125;</span></span><br><span class="line"><span class="attr">    securityContext:</span></span><br><span class="line"><span class="attr">      privileged:</span> <span class="literal">true</span></span><br><span class="line"><span class="attr">    terminationMessagePath:</span> <span class="string">/dev/termination-log</span></span><br><span class="line"><span class="attr">    terminationMessagePolicy:</span> <span class="string">File</span></span><br><span class="line"><span class="attr">    volumeMounts:</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">mattermost-data</span></span><br><span class="line"><span class="attr">  - name:</span> <span class="string">copy-config</span></span><br><span class="line"><span class="attr">    image:</span> <span class="string">"alpine:latest"</span></span><br><span class="line"><span class="attr">    imagePullPolicy:</span> <span class="string">IfNotPresent</span></span><br><span class="line"><span class="attr">    volumeMounts:</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/config/config.json</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">config-json</span></span><br><span class="line"><span class="attr">      subPath:</span> <span class="string">config.json</span></span><br><span class="line"><span class="attr">    - mountPath:</span> <span class="string">/mattermost/data</span></span><br><span class="line"><span class="attr">      name:</span> <span class="string">mattermost-data</span></span><br><span class="line"><span class="attr">    command:</span> <span class="string">["/bin/ash",</span> <span class="string">"-c"</span><span class="string">,</span> <span class="string">"cp -f /mattermost/config/config.json /mattermost/data/config.json"</span><span class="string">]</span></span><br></pre></td></tr></table></figure>
+
+
+      
+      <!-- reward -->
+      
+      <div id="reward-btn">
+        打赏
+      </div>
+      
+    </div>
+      <!-- copyright -->
+      
+        <div class="declare">
+          <ul class="post-copyright">
+            <li>
+              <i class="ri-copyright-line"></i>
+              <strong>版权声明： </strong s>
+              本博客所有文章除特别声明外，均采用 <a href="https://www.apache.org/licenses/LICENSE-2.0.html" rel="external nofollow"
+                target="_blank">Apache License 2.0</a> 许可协议。转载请注明出处！
+            </li>
+          </ul>
+        </div>
+        
+    <footer class="article-footer">
+      
+          
+<div class="share-btn">
+      <span class="share-sns share-outer">
+        <i class="ri-share-forward-line"></i>
+        分享
+      </span>
+      <div class="share-wrap">
+        <i class="arrow"></i>
+        <div class="share-icons">
+          
+          <a class="weibo share-sns" href="javascript:;" data-type="weibo">
+            <i class="ri-weibo-fill"></i>
+          </a>
+          <a class="weixin share-sns wxFab" href="javascript:;" data-type="weixin">
+            <i class="ri-wechat-fill"></i>
+          </a>
+          <a class="qq share-sns" href="javascript:;" data-type="qq">
+            <i class="ri-qq-fill"></i>
+          </a>
+          <a class="douban share-sns" href="javascript:;" data-type="douban">
+            <i class="ri-douban-line"></i>
+          </a>
+          <!-- <a class="qzone share-sns" href="javascript:;" data-type="qzone">
+            <i class="icon icon-qzone"></i>
+          </a> -->
+          
+          <a class="facebook share-sns" href="javascript:;" data-type="facebook">
+            <i class="ri-facebook-circle-fill"></i>
+          </a>
+          <a class="twitter share-sns" href="javascript:;" data-type="twitter">
+            <i class="ri-twitter-fill"></i>
+          </a>
+          <a class="google share-sns" href="javascript:;" data-type="google">
+            <i class="ri-google-fill"></i>
+          </a>
+        </div>
+      </div>
+</div>
+
+<div class="wx-share-modal">
+    <a class="modal-close" href="javascript:;"><i class="ri-close-circle-line"></i></a>
+    <p>扫一扫，分享到微信</p>
+    <div class="wx-qrcode">
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMYAAADGCAAAAACs8KCBAAACJklEQVR42u3aQW7DMAwEwP7/0y7QaxBnSSkFTI1ORevEGh22oqifn3hcfyN/8t3z18u4//3mgYGB8VjGdTsSxutf76eVvyuZGwYGxjmM+8klr8mTMA/rZG4YGBgYeUTevz6fEAYGBsauwL3f8OUlcXU5MDAwTmZUI7UXkfkG8Yu1OAYGxgMZ1cbAf/78xf4GBgbGQxjX8tjbW2zOAQMDYzSjWnxW25b5NjEpiT/MEAMDYygjD77koK23l+uVu2//b2BgYAxl5IAkCtcnV258YmBgjGYkIZhsAfMmwa6FixqZGBgYIxjlOGtt7KqXyfKFw8DAOIdRjdQVah6shWcwMDBGM1amXn0mj9p8gTAwMM5kFDZkxbisXtpIMM3OKgYGxgMZ1fKyF455ZOftzw/XwjAwMEYwrtaoXtvqHc8V2BgYGAcwql+3Xtzu+iwGBsZpjO9d/9p7wSK6bIGBgTGO0Sss81J2b6kcXbbAwMAYxFiJyN6EqmHdPDXEwMAYykjiclcxXN0ORrGOgYFxAGMlBKvnYLuuX3zoxGJgYAxi5JOuvjKP12rxjIGBcQ5j5ZpF3p7Ml6a3BBgYGLMZvU1er5GQZ3/+LgwMjHMYvcbhfYBWC9de2YyBgXEaYyVklw70izH94bIFBgYGRryZ6x2flU8HV74IAwNjKKN3XSwJ0JVDPQwMjHMY1WuseRRWl2np0B8DA2Moo7eBy8M0Wbhdn8XAwBjH+AWBBdsZqdis6AAAAABJRU5ErkJggg==" alt="微信分享二维码">
+    </div>
+</div>
+
+<div id="share-mask"></div>
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/helm/" rel="tag">helm</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/k8s/" rel="tag">k8s</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/mattermost/" rel="tag">mattermost</a></li></ul>
+
+
+    </footer>
+
+  </div>
+
+  
+  
+  <nav class="article-nav">
+    
+    
+      <a href="/2020/02/10/2020newYearNewTheme/" class="article-nav-link">
+        <strong class="article-nav-caption">下一篇</strong>
+        <div class="article-nav-title">新年新主题</div>
+      </a>
+    
+  </nav>
+
+
+  
+
+  
+
+  
+  
+<div class="gitalk" id="gitalk-container"></div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gitalk@1.5.2/dist/gitalk.css">
+
+
+<script src="https://cdn.jsdelivr.net/npm/gitalk@1.5.2/dist/gitalk.min.js"></script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/blueimp-md5@2.10.0/js/md5.min.js"></script>
+
+<script type="text/javascript">
+  var gitalk = new Gitalk({
+    clientID: '4f2ef01d1a68f46c7103',
+    clientSecret: '9935bf05e17cebb742fbdcad8c7d0dbb6b7f4f68',
+    repo: 'ckyOL.github.io',
+    owner: 'ckyOL',
+    admin: ['ckyOL'],
+    // id: location.pathname,      // Ensure uniqueness and length less than 50
+    id: md5(location.pathname),
+    distractionFreeMode: false,  // Facebook-like distraction free mode
+    pagerDirection: 'last'
+  })
+
+  gitalk.render('gitalk-container')
+</script>
+
+  
+
+</article>
+</section>
+      <footer class="footer">
+  <div class="outer">
+    <ul class="list-inline">
+      <li>
+        &copy;
+        2016-2020
+        cky
+      </li>
+      <li>
+        
+          Powered by
+        
+        
+        <a href="https://hexo.io" target="_blank">Hexo</a> Theme <a href="https://github.com/Shen-Yu/hexo-theme-ayer" target="_blank">Ayer</a>
+        
+      </li>
+    </ul>
+    <ul class="list-inline">
+      <li>
+        
+      </li>
+      <li>
+        <!-- cnzz统计 -->
+        
+      </li>
+    </ul>
+  </div>
+</footer>
+    <div class="to_top">
+        <div class="totop" id="totop">
+  <i class="ri-arrow-up-line"></i>
+</div>
+      </div>
+    </main>
+      <aside class="sidebar">
+        <button class="navbar-toggle"></button>
+<nav class="navbar">
+  
+  <div class="logo">
+    <a href="/"><img src="/images/side.svg" alt="ckyOL&#39;s b10g"></a>
+  </div>
+  
+  <ul class="nav nav-main">
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/">主页</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/archives">归档</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/categories">分类</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/tags">标签</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/2016/04/24/friendLink">友链</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="https://peing.net/ckyol" target="_blank" rel="noopener">Peing</a>
+    </li>
+    
+    <li class="nav-item">
+      <a class="nav-item-link" href="/2016/04/24/about">关于我</a>
+    </li>
+    
+  </ul>
+</nav>
+<nav class="navbar navbar-bottom">
+  <ul class="nav">
+    <li class="nav-item">
+      
+      <a class="nav-item-link nav-item-search"  title="搜索">
+        <i class="ri-search-line"></i>
+      </a>
+      
+      
+      <a class="nav-item-link" target="_blank" href="/atom.xml" title="RSS Feed">
+        <i class="ri-rss-line"></i>
+      </a>
+      
+    </li>
+  </ul>
+</nav>
+<div class="search-form-wrap">
+  <div class="local-search local-search-plugin">
+  <input type="search" id="local-search-input" class="local-search-input" placeholder="Search...">
+  <div id="local-search-result" class="local-search-result"></div>
+</div>
+</div>
+      </aside>
+      <div id="mask"></div>
+
+<!-- #reward -->
+<div id="reward">
+  <span class="close"><i class="ri-close-line"></i></span>
+  <p class="reward-p"><i class="ri-cup-line"></i>请我喝杯咖啡吧~</p>
+  <div class="reward-box">
+    
+    <div class="reward-item">
+      <img class="reward-img" src="/images/alipay.png">
+      <span class="reward-type">支付宝</span>
+    </div>
+    
+    
+  </div>
+</div>
+      
+<script src="/js/jquery-2.0.3.min.js"></script>
+
+
+<script src="/js/jquery.justifiedGallery.min.js"></script>
+
+
+<script src="/js/lazyload.min.js"></script>
+
+
+<script src="/js/busuanzi-2.3.pure.min.js"></script>
+
+
+<script src="/js/share.js"></script>
+
+
+
+
+<script>
+  try {
+    var typed = new Typed("#subtitle", {
+    strings: ['技术','宅圈',''],
+    startDelay: 0,
+    typeSpeed: 200,
+    loop: true,
+    backSpeed: 100,
+    showCursor: true
+    });
+  } catch (err) {
+  }
+  
+</script>
+
+
+
+
+<script src="/js/tocbot.min.js"></script>
+
+<script>
+  // Tocbot_v4.7.0  http://tscanlin.github.io/tocbot/
+  tocbot.init({
+    tocSelector: '.tocbot',
+    contentSelector: '.article-entry',
+    headingSelector: 'h1, h2, h3, h4, h5, h6',
+    hasInnerContainers: true,
+    scrollSmooth: true,
+    scrollContainer:'main',
+    positionFixedSelector: '.tocbot',
+    positionFixedClass: 'is-position-fixed',
+    fixedSidebarOffset: 'auto',
+    onClick: (e) => {
+      $('.toc-link').removeClass('is-active-link');
+      $(`a[href=${e.target.hash}]`).addClass('is-active-link');
+      $(e.target.hash).scrollIntoView();
+      return false;
+    }
+  });
+</script>
+
+
+<script>
+  var ayerConfig = {
+    mathjax: true
+  }
+</script>
+
+
+<script src="/js/ayer.js"></script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/jquery-modal@0.9.2/jquery.modal.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery-modal@0.9.2/jquery.modal.min.css">
+
+
+<!-- Root element of PhotoSwipe. Must have class pswp. -->
+<div class="pswp" tabindex="-1" role="dialog" aria-hidden="true">
+
+    <!-- Background of PhotoSwipe. 
+         It's a separate element as animating opacity is faster than rgba(). -->
+    <div class="pswp__bg"></div>
+
+    <!-- Slides wrapper with overflow:hidden. -->
+    <div class="pswp__scroll-wrap">
+
+        <!-- Container that holds slides. 
+            PhotoSwipe keeps only 3 of them in the DOM to save memory.
+            Don't modify these 3 pswp__item elements, data is added later on. -->
+        <div class="pswp__container">
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+        </div>
+
+        <!-- Default (PhotoSwipeUI_Default) interface on top of sliding area. Can be changed. -->
+        <div class="pswp__ui pswp__ui--hidden">
+
+            <div class="pswp__top-bar">
+
+                <!--  Controls are self-explanatory. Order can be changed. -->
+
+                <div class="pswp__counter"></div>
+
+                <button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+
+                <button class="pswp__button pswp__button--share" style="display:none" title="Share"></button>
+
+                <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+
+                <button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button>
+
+                <!-- Preloader demo http://codepen.io/dimsemenov/pen/yyBWoR -->
+                <!-- element will get class pswp__preloader--active when preloader is running -->
+                <div class="pswp__preloader">
+                    <div class="pswp__preloader__icn">
+                        <div class="pswp__preloader__cut">
+                            <div class="pswp__preloader__donut"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
+                <div class="pswp__share-tooltip"></div>
+            </div>
+
+            <button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+            </button>
+
+            <button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)">
+            </button>
+
+            <div class="pswp__caption">
+                <div class="pswp__caption__center"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.css">
+<script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js"></script>
+
+<script>
+    function viewer_init() {
+        let pswpElement = document.querySelectorAll('.pswp')[0];
+        let $imgArr = document.querySelectorAll(('.article-entry img:not(.reward-img)'))
+
+        $imgArr.forEach(($em, i) => {
+            $em.onclick = () => {
+                // slider展开状态
+                // todo: 这样不好，后面改成状态
+                if (document.querySelector('.left-col.show')) return
+                let items = []
+                $imgArr.forEach(($em2, i2) => {
+                    let img = $em2.getAttribute('data-idx', i2)
+                    let src = $em2.getAttribute('data-target') || $em2.getAttribute('src')
+                    let title = $em2.getAttribute('alt')
+                    // 获得原图尺寸
+                    const image = new Image()
+                    image.src = src
+                    items.push({
+                        src: src,
+                        w: image.width || $em2.width,
+                        h: image.height || $em2.height,
+                        title: title
+                    })
+                })
+                var gallery = new PhotoSwipe(pswpElement, PhotoSwipeUI_Default, items, {
+                    index: parseInt(i)
+                });
+                gallery.init()
+            }
+        })
+    }
+    viewer_init()
+</script>
+
+
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+      tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      }
+  });
+
+  MathJax.Hub.Queue(function() {
+      var all = MathJax.Hub.getAllJax(), i;
+      for(i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+      }
+  });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/mathjax@2.7.6/unpacked/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+
+<script type="text/javascript" src="https://js.users.51.la/20544303.js"></script>
+  </div>
+</body>
+
+</html>
